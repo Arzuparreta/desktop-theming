@@ -12,7 +12,10 @@ link() { # repo-relative source, absolute target
   if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
     return
   fi
-  if [ -e "$dst" ] || [ -L "$dst" ]; then
+  if [ -L "$dst" ]; then
+    # Stale link (e.g. the repo was moved): just repoint it.
+    rm "$dst"
+  elif [ -e "$dst" ]; then
     mv "$dst" "$dst.bak-$stamp"
     echo "backup  $dst.bak-$stamp"
   fi
