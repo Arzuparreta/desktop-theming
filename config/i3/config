@@ -11,7 +11,7 @@ set $ws10 "10"
 ###############################################################################
 # AUTOSTART
 ###############################################################################
-exec_always --no-startup-id ~/.scripts/pywal-restore.sh
+exec_always --no-startup-id ~/.local/bin/walltheme restore --no-polybar
 exec_always mkfifo /tmp/xobpipe && tail -f /tmp/xobpipe | xob -t 2170 & disown
 exec --no-startup-id redshift exec --no-startup-id /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
 exec --no-startup-id "i3-msg 'workspace 1; exec kitty'"
@@ -58,8 +58,9 @@ bindsym $mod+e exec thunar
 bindsym $mod+Shift+b exec firefox
 bindsym $mod+b exec fly-browser 
 bindsym $mod+space exec rofi -show drun
-# wallpaper + pywal (pick or random from ~/Pictures/Wallpapers)
-bindsym $mod+w exec --no-startup-id ~/.scripts/wallpaper-selector.sh
+# wallpaper + theme menu (walltheme); Mod+Shift+w toggles light/dark (e.g. outdoors)
+bindsym $mod+w exec --no-startup-id ~/.local/bin/wallpaper-menu
+bindsym $mod+Shift+w exec --no-startup-id ~/.local/bin/walltheme toggle-polarity
 # open Soundsible webapp and Soundsible daemon
 bindsym $mod+s exec chromium --app=http://localhost:5005/player/desktop/    
 bindsym $mod+Shift+s exec $term /home/arsu/Git-projects/soundsible/run.py --daemon

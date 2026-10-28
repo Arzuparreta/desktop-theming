@@ -1,0 +1,748 @@
+#!/usr/bin/env python3
+"""walltheme — accessible terminal/desktop color schemes from wallpapers.
+
+Modes
+  adaptive  Colors come from the wallpaper (a monochrome wallpaper gives a
+            monochrome theme). Every color is then pushed in lightness until
+            it meets the contrast targets. If the result still fails the
+            accessibility checks, the safe theme is used instead.
+  safe      A hand-designed palette that works with any wallpaper. Only the
+            risk-free parts adapt: a faint background tint and the accent
+            (cursor, borders, selection).
+
+Polarity
+  dark | light  (light = light background, dark text; meant for sunlight)
+
+Output is a pywal colorscheme JSON fed to `wal --theme`, so every pywal
+template (kitty, Xresources -> i3/polybar, sequences...) keeps working.
+"""
+
+import argparse
+import json
+import math
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from PIL import Image
+
+HOME = Path.home()
+STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "walltheme"
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "walltheme"
+STATE_FILE = STATE_DIR / "state.json"
+DEFAULT_STATE = {"mode": "adaptive", "polarity": "dark", "wallpaper": None}
+
+# Contrast targets (WCAG 2 ratios against the background).
+TARGETS = {
+    "dark": {"fg": 7.0, "ansi": 5.0, "bright": 5.0, "dim": 4.0, "dim_min": 3.5},
+    # Light mode is for sunlight: ask for more.
+    "light": {"fg": 10.0, "ansi": 5.5, "bright": 5.0, "dim": 4.0, "dim_min": 3.5},
+}
+# Minimum OKLab distance between ANSI colors so they stay distinguishable.
+MIN_DE_PAIR = 0.045
+# red(1) vs green(2): zsh paints unknown commands red and known ones green.
+MIN_DE_RED_GREEN = 0.09
+# Any ANSI color vs plain text, so colored words don't read as plain ones.
+MIN_DE_FG = 0.07
+
+# ANSI slot -> canonical OKLCH hue.
+SLOT_HUES = {1: 29.0, 2: 142.0, 3: 100.0, 4: 264.0, 5: 328.0, 6: 195.0}
+SLOT_NAMES = {1: "red", 2: "green", 3: "yellow", 4: "blue", 5: "magenta", 6: "cyan"}
+
+
+# --------------------------------------------------------------------------
+# Color math (sRGB <-> OKLab/OKLCH, WCAG contrast)
+# --------------------------------------------------------------------------
+
+def _lin(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _gam(c):
+    return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+
+def rgb_to_oklab(rgb):
+    r, g, b = (_lin(x) for x in rgb)
+    l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+    m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+    s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+    l, m, s = (math.copysign(abs(x) ** (1 / 3), x) for x in (l, m, s))
+    return (
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    )
+
+
+def oklab_to_linear(L, a, b):
+    l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    return (
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    )
+
+
+class Color:
+    """An OKLCH color, mapped into the sRGB gamut by reducing chroma."""
+
+    __slots__ = ("L", "C", "h", "rgb")
+
+    def __init__(self, L, C, h):
+        self.L = min(max(L, 0.0), 1.0)
+        self.h = h % 360
+        self.C, self.rgb = self._fit(max(C, 0.0))
+
+    def _fit(self, C):
+        def lin(c):
+            a = c * math.cos(math.radians(self.h))
+            b = c * math.sin(math.radians(self.h))
+            return oklab_to_linear(self.L, a, b)
+
+        def ok(v):
+            return all(-1e-6 <= x <= 1 + 1e-6 for x in v)
+
+        v = lin(C)
+        if not ok(v):
+            lo, hi = 0.0, C
+            for _ in range(30):
+                mid = (lo + hi) / 2
+                if ok(lin(mid)):
+                    lo = mid
+                else:
+                    hi = mid
+            C, v = lo, lin(lo)
+        return C, tuple(_gam(min(max(x, 0.0), 1.0)) for x in v)
+
+    @classmethod
+    def from_rgb(cls, rgb):
+        L, a, b = rgb_to_oklab(rgb)
+        c = cls.__new__(cls)
+        c.L, c.C = L, math.hypot(a, b)
+        c.h = math.degrees(math.atan2(b, a)) % 360
+        c.rgb = tuple(rgb)
+        return c
+
+    @classmethod
+    def from_hex(cls, s):
+        s = s.lstrip("#")
+        return cls.from_rgb(tuple(int(s[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+
+    def with_(self, L=None, C=None, h=None):
+        return Color(self.L if L is None else L, self.C if C is None else C,
+                     self.h if h is None else h)
+
+    @property
+    def hex(self):
+        return "#" + "".join(f"{round(x * 255):02x}" for x in self.rgb)
+
+    @property
+    def lab(self):
+        return rgb_to_oklab(self.rgb)
+
+    @property
+    def luminance(self):
+        r, g, b = (_lin(x) for x in self.rgb)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    def __repr__(self):
+        return f"Color({self.hex} L={self.L:.3f} C={self.C:.3f} h={self.h:.0f})"
+
+
+def contrast(a, b):
+    la, lb = a.luminance, b.luminance
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def delta_e(a, b):
+    return math.dist(a.lab, b.lab)
+
+
+def hue_dist(a, b):
+    d = abs(a - b) % 360
+    return min(d, 360 - d)
+
+
+def toward(src, dst, max_dev):
+    """Hue `src` pulled toward `dst` so it ends at most `max_dev` degrees away."""
+    d = (src - dst + 180) % 360 - 180
+    if abs(d) <= max_dev:
+        return src % 360
+    return (dst + math.copysign(max_dev, d)) % 360
+
+
+def ensure_contrast(color, bg, target, polarity):
+    """Move lightness away from bg until contrast >= target. None if impossible."""
+    if contrast(color, bg) >= target:
+        return color
+    end = 1.0 if polarity == "dark" else 0.0
+    if contrast(color.with_(L=end), bg) < target:
+        return None
+    lo, hi = color.L, end
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if contrast(color.with_(L=mid), bg) >= target:
+            hi = mid
+        else:
+            lo = mid
+    return color.with_(L=hi)
+
+
+def at_contrast(color, bg, target, polarity):
+    """Lightness chosen so contrast against bg is (about) exactly `target`."""
+    lo, hi = bg.L, (1.0 if polarity == "dark" else 0.0)
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if contrast(color.with_(L=mid), bg) >= target:
+            hi = mid
+        else:
+            lo = mid
+    return color.with_(L=hi)
+
+
+# --------------------------------------------------------------------------
+# Wallpaper analysis
+# --------------------------------------------------------------------------
+
+class Analysis:
+    def __init__(self, path, n=24):
+        im = Image.open(path)
+        im.draft("RGB", (512, 512))
+        im = im.convert("RGB")
+        im.thumbnail((320, 320))
+        q = im.quantize(colors=n, method=Image.Quantize.MEDIANCUT,
+                        dither=Image.Dither.NONE)
+        pal = q.getpalette()
+        counts = q.getcolors(maxcolors=n * 4) or []
+        total = sum(c for c, _ in counts) or 1
+        self.colors = sorted(
+            ((cnt / total, Color.from_rgb(tuple(v / 255 for v in pal[i * 3:i * 3 + 3])))
+             for cnt, i in counts),
+            key=lambda wc: -wc[0])
+        if not self.colors:
+            raise ValueError("no colors extracted")
+
+        chromatic = [(w, c) for w, c in self.colors if c.C >= 0.03]
+        mass = sum(w * c.C for w, c in chromatic)
+        self.avg_chroma = sum(w * c.C for w, c in self.colors)
+        self.achromatic = self.avg_chroma < 0.012 or mass < 0.006
+        if mass > 0:
+            x = sum(w * c.C * math.cos(math.radians(c.h)) for w, c in chromatic)
+            y = sum(w * c.C * math.sin(math.radians(c.h)) for w, c in chromatic)
+            self.hue = math.degrees(math.atan2(y, x)) % 360
+            self.hue_concentration = math.hypot(x, y) / mass
+        else:
+            self.hue, self.hue_concentration = 0.0, 0.0
+        self.monochrome = not self.achromatic and self.hue_concentration > 0.95
+        # Typical chroma of the colorful part of the image.
+        self.chroma = (mass / sum(w for w, _ in chromatic)) if chromatic else 0.0
+        # Accent: the most eye-catching color (colorful, not negligible area).
+        self.accent = max(self.colors, key=lambda wc: wc[1].C * wc[0] ** 0.3)[1]
+        self.candidates = self._candidates(chromatic)
+
+    @staticmethod
+    def _candidates(chromatic):
+        """Distinct-hue colorful colors, best (most colorful/large) first."""
+        ranked = sorted(chromatic, key=lambda wc: -(wc[1].C * wc[0] ** 0.25))
+        out = []
+        for w, c in ranked:
+            if all(hue_dist(c.h, o.h) > 12 for o in out):
+                out.append(c)
+        return out
+
+    def describe(self):
+        kind = "achromatic" if self.achromatic else "monochrome" if self.monochrome else "multi-hue"
+        return (f"{kind}  hue={self.hue:.0f}  concentration={self.hue_concentration:.2f}"
+                f"  chroma={self.chroma:.3f}  candidates={len(self.candidates)}")
+
+
+# --------------------------------------------------------------------------
+# Scheme building
+# --------------------------------------------------------------------------
+
+class SchemeError(Exception):
+    pass
+
+
+def _flip_L(L_dark):
+    """Map a lightness designed for dark backgrounds onto light backgrounds."""
+    return 1.13 - 0.9 * L_dark
+
+
+def _finish(bg, fg, ansi, dim_seed, accent, polarity, kind):
+    """Common tail: enforce contrast, derive bright/dim colors, validate."""
+    t = TARGETS[polarity]
+    sign = 1 if polarity == "dark" else -1
+
+    fg = ensure_contrast(fg, bg, t["fg"], polarity)
+    if fg is None:
+        raise SchemeError("foreground cannot reach contrast target")
+
+    normal, bright = {}, {}
+    for slot, col in ansi.items():
+        n = ensure_contrast(col, bg, t["ansi"], polarity)
+        if n is None:
+            raise SchemeError(f"{SLOT_NAMES[slot]} cannot reach contrast target")
+        b = ensure_contrast(n.with_(L=n.L + sign * 0.07, C=n.C * 1.05), bg, t["bright"], polarity)
+        if b is None:
+            raise SchemeError(f"bright {SLOT_NAMES[slot]} cannot reach contrast target")
+        normal[slot], bright[slot] = n, b
+
+    # color8: comments / autosuggestions. Dimmer than text, still readable.
+    dim = at_contrast(dim_seed, bg, t["dim"], polarity)
+
+    accent = ensure_contrast(accent, bg, t["ansi"], polarity)
+    if accent is None:
+        accent = normal[4]
+
+    fg_hi = fg.with_(L=fg.L + sign * 0.05)
+    colors = [bg] + [normal[i] for i in range(1, 7)] + [fg, dim] + \
+             [bright[i] for i in range(1, 7)] + [fg_hi]
+    scheme = {"bg": bg, "fg": fg, "cursor": accent, "accent": accent,
+              "colors": colors, "polarity": polarity, "kind": kind}
+    validate(scheme)
+    return scheme
+
+
+def validate(scheme):
+    """Raise SchemeError if the scheme is not accessible enough."""
+    bg, fg, cols = scheme["bg"], scheme["fg"], scheme["colors"]
+    t = TARGETS[scheme["polarity"]]
+    problems = []
+    if contrast(fg, bg) < t["fg"] - 0.01:
+        problems.append(f"fg contrast {contrast(fg, bg):.2f}")
+    for i in list(range(1, 7)) + list(range(9, 16)):
+        need = t["ansi"] if i < 8 else t["bright"]
+        if contrast(cols[i], bg) < need - 0.01:
+            problems.append(f"color{i} contrast {contrast(cols[i], bg):.2f}")
+    if contrast(cols[8], bg) < t["dim_min"]:
+        problems.append(f"color8 contrast {contrast(cols[8], bg):.2f}")
+    # Dim text must look clearly different from normal text.
+    if contrast(fg, cols[8]) < 1.6:
+        problems.append("color8 too close to foreground")
+    if delta_e(cols[1], cols[2]) < MIN_DE_RED_GREEN:
+        problems.append(f"red/green too similar (ΔE {delta_e(cols[1], cols[2]):.3f})")
+    for i in range(1, 7):
+        if delta_e(cols[i], fg) < MIN_DE_FG:
+            problems.append(f"{SLOT_NAMES[i]} too close to foreground "
+                            f"(ΔE {delta_e(cols[i], fg):.3f})")
+        for j in range(i + 1, 7):
+            if delta_e(cols[i], cols[j]) < MIN_DE_PAIR:
+                problems.append(f"{SLOT_NAMES[i]}/{SLOT_NAMES[j]} too similar "
+                                f"(ΔE {delta_e(cols[i], cols[j]):.3f})")
+    if problems:
+        raise SchemeError("; ".join(problems))
+
+
+def _separate(slots, bg, fg, polarity):
+    """Contrast-enforce the ANSI slots and nudge colliding ones apart.
+
+    The slot farther from its semantic hue moves 10 degrees toward it, so
+    wallpaper colors are kept as much as distinctness allows. Slots already
+    on their semantic hue separate in lightness/chroma instead. The
+    foreground takes part as a fixed member (slot 0) that never moves.
+    """
+    fg = ensure_contrast(fg, bg, TARGETS[polarity]["fg"], polarity) or fg
+    target = TARGETS[polarity]["ansi"]
+    cols = {}
+    for _ in range(80):
+        for s, (L, C, h) in slots.items():
+            c = ensure_contrast(Color(L, C, h), bg, target, polarity)
+            if c is None:
+                raise SchemeError(f"{SLOT_NAMES[s]} cannot reach contrast target")
+            cols[s] = c
+        cols[0] = fg
+        worst = None
+        for i in cols:
+            for j in cols:
+                if i < j:
+                    need = (MIN_DE_FG if i == 0 else
+                            MIN_DE_RED_GREEN if (i, j) == (1, 2) else MIN_DE_PAIR)
+                    gap = delta_e(cols[i], cols[j]) / (need * 1.1)
+                    if gap < 1 and (worst is None or gap < worst[0]):
+                        worst = (gap, i, j)
+        if worst is None:
+            break
+        _, i, j = worst
+        k = j if i == 0 else max((i, j), key=lambda s: hue_dist(slots[s][2], SLOT_HUES[s]))
+        off = hue_dist(slots[k][2], SLOT_HUES[k])
+        if off > 1:
+            slots[k][2] = toward(slots[k][2], SLOT_HUES[k], max(off - 10, 0))
+        else:
+            other = i if k == j else j
+            step = 0.03 if cols[k].L >= cols[other].L else -0.03
+            slots[k][0] = min(max(cols[k].L + step, 0.05), 0.97)
+            slots[k][1] = min(slots[k][1] + 0.015, 0.22)
+    del cols[0]
+    return cols
+
+
+def build_adaptive(an, polarity):
+    dark = polarity == "dark"
+    h = an.hue
+    if an.achromatic:
+        tint = 0.0
+    elif an.monochrome:
+        tint = min(0.05, max(0.025, an.chroma * 0.4))
+    else:
+        tint = min(0.035, an.chroma * 0.3)
+
+    if dark:
+        bg = Color(0.20, tint, h)
+        fg = Color(0.91, min(tint * 0.9, 0.04), h)
+    else:
+        bg = Color(0.97, tint * 0.6, h)
+        fg = Color(0.25, min(tint * 1.2, 0.06), h)
+    dim_seed = Color(0.5, min(tint, 0.03), h)
+
+    slots = {}  # slot -> [L, C, hue]
+    if an.monochrome:
+        # All colors share the wallpaper hue family and differ in lightness,
+        # chroma and a small hue offset. Red (unknown command) is the most
+        # conspicuous one so it never blends with green (known command).
+        base = min(max(an.chroma, 0.09), 0.17)
+        table = {  # slot: (hue offset, L on dark bg, chroma factor)
+            1: (-38, 0.88, 1.25),
+            2: (0, 0.72, 1.0),
+            3: (-18, 0.82, 0.95),
+            4: (+28, 0.70, 0.9),
+            5: (+50, 0.78, 0.85),
+            6: (+14, 0.90, 0.6),
+        }
+        for slot, (dh, L, cf) in table.items():
+            slots[slot] = [L if dark else _flip_L(L), base * cf, (h + dh) % 360]
+    else:
+        cands = an.candidates
+        free = set(range(len(cands)))
+        pairs = sorted((hue_dist(c.h, SLOT_HUES[s]), s, i)
+                       for s in SLOT_HUES for i, c in enumerate(cands))
+        chosen = {}
+        for d, s, i in pairs:
+            if s not in chosen and i in free:
+                chosen[s] = cands[i]
+                free.discard(i)
+        for s in SLOT_HUES:
+            if s in chosen:
+                src = chosen[s]
+            elif cands:
+                src = min(cands, key=lambda c: hue_dist(c.h, SLOT_HUES[s]))
+            else:  # achromatic wallpaper: neutral semantic colors
+                src = Color(0.7, 0.12, SLOT_HUES[s])
+            C = min(max(src.C * 1.1, 0.09), 0.19)
+            L = min(max(src.L, 0.70), 0.86)
+            slots[s] = [L if dark else _flip_L(L), C, toward(src.h, SLOT_HUES[s], 40)]
+    ansi = _separate(slots, bg, fg, polarity)
+
+    accent_src = an.accent if an.accent.C >= 0.04 else ansi[4]
+    accent = Color(0.78 if dark else 0.45, max(accent_src.C, 0.08), accent_src.h)
+    kind = "monochrome" if an.monochrome else "achromatic" if an.achromatic else "multi-hue"
+    return _finish(bg, fg, ansi, dim_seed, accent, polarity, f"adaptive/{kind}")
+
+
+# Hand-designed safe palettes (OKLCH). Generous margins over the targets.
+SAFE = {
+    "dark": {
+        "bg": (0.19, 0.0), "fg": (0.92, 0.0),
+        1: (0.72, 0.16, 25), 2: (0.78, 0.15, 145), 3: (0.84, 0.14, 90),
+        4: (0.74, 0.13, 255), 5: (0.76, 0.14, 320), 6: (0.80, 0.11, 200),
+    },
+    "light": {
+        "bg": (0.975, 0.0), "fg": (0.21, 0.0),
+        1: (0.50, 0.19, 27), 2: (0.48, 0.14, 145), 3: (0.50, 0.12, 75),
+        4: (0.46, 0.16, 262), 5: (0.48, 0.18, 330), 6: (0.49, 0.10, 205),
+    },
+}
+
+
+def build_safe(an, polarity):
+    p = SAFE[polarity]
+    h = an.hue if an else 0.0
+    # The only image-driven parts: a faint background tint and the accent.
+    tint = 0.0 if (an is None or an.achromatic) else (0.012 if polarity == "dark" else 0.008)
+    bg = Color(p["bg"][0], tint, h)
+    fg = Color(p["fg"][0], tint, h)
+    ansi = {s: Color(*p[s]) for s in SLOT_HUES}
+    dim_seed = Color(0.5, tint, h)
+    if an is not None and an.accent.C >= 0.04:
+        accent = Color(0.78 if polarity == "dark" else 0.45, max(an.accent.C, 0.08), an.accent.h)
+    else:
+        accent = ansi[4]
+    return _finish(bg, fg, ansi, dim_seed, accent, polarity, "safe")
+
+
+def build(image, mode, polarity):
+    """Returns (scheme, fallback_reason or None)."""
+    try:
+        an = Analysis(image)
+    except Exception as e:  # unreadable image: safe theme, untinted
+        return build_safe(None, polarity), f"no se pudo analizar la imagen ({e})"
+    if mode == "safe":
+        return build_safe(an, polarity), None
+    try:
+        return build_adaptive(an, polarity), None
+    except SchemeError as e:
+        return build_safe(an, polarity), str(e)
+
+
+# --------------------------------------------------------------------------
+# Output
+# --------------------------------------------------------------------------
+
+def to_pywal(scheme, wallpaper):
+    return {
+        "wallpaper": str(wallpaper),
+        "alpha": "100",
+        "special": {"background": scheme["bg"].hex, "foreground": scheme["fg"].hex,
+                    "cursor": scheme["cursor"].hex},
+        "colors": {f"color{i}": c.hex for i, c in enumerate(scheme["colors"])},
+    }
+
+
+def kitty_extra(scheme):
+    bg, fg, acc = scheme["bg"], scheme["fg"], scheme["accent"]
+    # Selection: accent-tinted background; fall back to inverse video.
+    sel = Color(bg.L + (0.22 if scheme["polarity"] == "dark" else -0.17), acc.C * 0.5, acc.h)
+    sel_fg = fg if contrast(fg, sel) >= 4.5 else (bg if contrast(bg, sel) >= 4.5 else None)
+    if sel_fg is None:
+        sel, sel_fg = fg, bg
+    lines = [
+        "# Generated by walltheme — do not edit",
+        f"selection_background {sel.hex}",
+        f"selection_foreground {sel_fg.hex}",
+        f"cursor {acc.hex}",
+        f"cursor_text_color {bg.hex}",
+        f"url_color {scheme['colors'][4].hex}",
+        f"active_border_color {acc.hex}",
+        f"inactive_border_color {scheme['colors'][8].hex}",
+        f"active_tab_background {acc.hex}",
+        f"active_tab_foreground {bg.hex}",
+        f"inactive_tab_background {bg.hex}",
+        f"inactive_tab_foreground {scheme['colors'][8].hex}",
+        f"tab_bar_background {bg.hex}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def report(scheme, an=None, out=sys.stdout):
+    bg = scheme["bg"]
+
+    def sw(c):
+        r, g, b = (round(x * 255) for x in c.rgb)
+        R, G, B = (round(x * 255) for x in bg.rgb)
+        return f"\x1b[48;2;{R};{G};{B}m\x1b[38;2;{r};{g};{b}m ▇▇ texto \x1b[0m"
+
+    if an is not None:
+        print(f"  {an.describe()}", file=out)
+    print(f"  scheme: {scheme['kind']} · {scheme['polarity']}", file=out)
+    print(f"  bg {bg.hex}   fg {scheme['fg'].hex} {sw(scheme['fg'])} {contrast(scheme['fg'], bg):5.2f}", file=out)
+    for i, c in enumerate(scheme["colors"]):
+        if i in (0, 7):
+            continue
+        print(f"  color{i:<2} {c.hex} {sw(c)} {contrast(c, bg):5.2f}", file=out)
+    print(f"  accent {scheme['accent'].hex} {sw(scheme['accent'])} {contrast(scheme['accent'], bg):5.2f}", file=out)
+
+
+# --------------------------------------------------------------------------
+# State & applying
+# --------------------------------------------------------------------------
+
+def load_state():
+    try:
+        return {**DEFAULT_STATE, **json.loads(STATE_FILE.read_text())}
+    except (OSError, ValueError):
+        state = dict(DEFAULT_STATE)
+        try:  # first run: take over pywal's current wallpaper
+            state["wallpaper"] = (HOME / ".cache/wal/wal").read_text().strip() or None
+        except OSError:
+            pass
+        return state
+
+
+def save_state(state):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n")
+
+
+def notify(title, body):
+    if shutil.which("notify-send"):
+        subprocess.run(["notify-send", "-a", "walltheme", title, body], check=False)
+
+
+def run_hooks(reload_i3, polybar):
+    env = dict(os.environ)
+    xres = HOME / ".cache/wal/colors.Xresources"
+    if xres.exists():
+        subprocess.run(["xrdb", "-merge", str(xres)], check=False)
+    if polybar and (HOME / ".config/polybar/launch.sh").exists():
+        subprocess.Popen([str(HOME / ".config/polybar/launch.sh")], env=env,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    subprocess.run(["pkill", "-USR1", "-x", "kitty"], check=False)
+    if reload_i3 and shutil.which("i3-msg"):
+        subprocess.run(["i3-msg", "reload"], stdout=subprocess.DEVNULL, check=False)
+
+
+def local_wallpaper(state):
+    """Local copy of the wallpaper, so restore/toggles work when the
+    (network-mounted) library is unavailable."""
+    src = state.get("wallpaper")
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    if src and Path(src).is_file():
+        dst = CACHE_DIR / ("wallpaper" + Path(src).suffix.lower())
+        if state.get("cached_from") != src or not dst.is_file():
+            for old in CACHE_DIR.glob("wallpaper.*"):
+                old.unlink()
+            shutil.copyfile(src, dst)
+            state["cached_from"] = src
+        return dst
+    cached = sorted(CACHE_DIR.glob("wallpaper.*"))
+    if cached and state.get("cached_from") == src:
+        return cached[0]
+    return None
+
+
+def wal_theme(theme_file):
+    """Render all pywal templates/sequences from our scheme."""
+    if not shutil.which("wal"):
+        return True
+    # -n: wallpaper is set by us, -e: reloads are done by run_hooks.
+    r = subprocess.run(["wal", "-q", "-n", "-e", "--theme", str(theme_file)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if r.returncode != 0:
+        notify("walltheme", f"wal --theme falló: {r.stderr.strip()[-200:]}")
+    return r.returncode == 0
+
+
+def set_wallpaper_image(image):
+    if shutil.which("feh"):
+        subprocess.run(["feh", "--bg-fill", str(image)], check=False)
+
+
+def apply(state, set_wallpaper=True, reload_i3=True, polybar=True, quiet=False):
+    image = local_wallpaper(state)
+    if image is None:
+        notify("Wallpaper", f"No disponible: {state.get('wallpaper')}")
+        return 1
+    image = str(image)
+    scheme, reason = build(image, state["mode"], state["polarity"])
+
+    theme_file = CACHE_DIR / "scheme.json"
+    theme_file.write_text(json.dumps(to_pywal(scheme, image), indent=2) + "\n")
+    (CACHE_DIR / "kitty-extra.conf").write_text(kitty_extra(scheme))
+
+    if not wal_theme(theme_file):
+        return 1
+    if set_wallpaper:
+        set_wallpaper_image(image)
+
+    state["effective"] = "safe" if reason or state["mode"] == "safe" else "adaptive"
+    state["fallback_reason"] = reason
+    save_state(state)
+    run_hooks(reload_i3, polybar)
+
+    if reason and not quiet:
+        notify("Tema seguro (fallback)",
+               f"{Path(image).name}: el tema adaptativo no era accesible.\n{reason}")
+    return 0
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+
+def main():
+    ap = argparse.ArgumentParser(prog="walltheme", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("set", help="set wallpaper and/or mode/polarity, then apply")
+    p.add_argument("image", nargs="?")
+    p.add_argument("--mode", choices=["adaptive", "safe"])
+    p.add_argument("--polarity", choices=["dark", "light"])
+
+    sub.add_parser("toggle-polarity", help="switch dark <-> light")
+    sub.add_parser("toggle-mode", help="switch adaptive <-> safe")
+    p = sub.add_parser("restore", help="re-apply the saved state (session start)")
+    p.add_argument("--no-polybar", action="store_true")
+    p = sub.add_parser("status", help="print current state as JSON")
+    p.add_argument("--shell", action="store_true", help="print key=value lines")
+
+    p = sub.add_parser("preview", help="print the scheme for an image without applying")
+    p.add_argument("image")
+    p.add_argument("--mode", choices=["adaptive", "safe"], default="adaptive")
+    p.add_argument("--polarity", choices=["dark", "light"], default="dark")
+
+    p = sub.add_parser("check", help="test every image in a directory, all modes")
+    p.add_argument("dir")
+
+    a = ap.parse_args()
+    state = load_state()
+
+    if a.cmd == "set":
+        if a.image:
+            state["wallpaper"] = str(Path(a.image).resolve())
+        if a.mode:
+            state["mode"] = a.mode
+        if a.polarity:
+            state["polarity"] = a.polarity
+        return apply(state)
+    if a.cmd == "toggle-polarity":
+        state["polarity"] = "light" if state["polarity"] == "dark" else "dark"
+        return apply(state, set_wallpaper=False)
+    if a.cmd == "toggle-mode":
+        state["mode"] = "safe" if state["mode"] == "adaptive" else "adaptive"
+        return apply(state, set_wallpaper=False)
+    if a.cmd == "restore":
+        # Fast path: reuse the last generated scheme, no image analysis.
+        theme_file = CACHE_DIR / "scheme.json"
+        cached = sorted(CACHE_DIR.glob("wallpaper.*"))
+        if theme_file.is_file() and cached:
+            if not wal_theme(theme_file):
+                return 1
+            set_wallpaper_image(cached[0])
+            run_hooks(reload_i3=False, polybar=not a.no_polybar)
+            return 0
+        return apply(state, reload_i3=False, polybar=not a.no_polybar, quiet=True)
+    if a.cmd == "status":
+        if a.shell:
+            for k in ("mode", "polarity", "effective", "wallpaper"):
+                print(f"{k}={shlex.quote(str(state.get(k) or ''))}")
+        else:
+            print(json.dumps(state, indent=2))
+        return 0
+    if a.cmd == "preview":
+        an = Analysis(a.image)
+        scheme, reason = build(a.image, a.mode, a.polarity)
+        report(scheme, an)
+        if reason:
+            print(f"  FALLBACK → safe: {reason}")
+        return 0
+    if a.cmd == "check":
+        exts = {".jpg", ".jpeg", ".png", ".webp"}
+        files = sorted(f for f in Path(a.dir).iterdir() if f.suffix.lower() in exts)
+        bad = 0
+        for f in files:
+            row = []
+            for pol in ("dark", "light"):
+                for mode in ("adaptive", "safe"):
+                    try:
+                        _, reason = build(str(f), mode, pol)
+                        row.append(f"{mode[:5]}-{pol}:{'FALLBACK' if reason else 'ok'}")
+                        if reason:
+                            row[-1] += f" ({reason})"
+                    except SchemeError as e:
+                        bad += 1
+                        row.append(f"{mode[:5]}-{pol}:ERROR {e}")
+            print(f"{f.name:34} " + "  ".join(row))
+        return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

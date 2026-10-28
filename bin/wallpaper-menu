@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Mod+w — pick/random wallpaper and choose theme mode (rofi).
+set -euo pipefail
+: "${HOME:=$(getent passwd "$(id -un)" | cut -d: -f6)}"
+export DISPLAY="${DISPLAY:-:0}"
+export PATH="$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+# Pywal's rofi theme is built for drun/window mode; -dmenu breaks with it.
+ROFI_DMENU_THEME="${ROFI_DMENU_THEME:-/usr/share/rofi/themes/solarized.rasi}"
+root="${WALLPAPER_ROOT:-/mnt/desktop-ruben/wallpapers/}"
+
+rofi_dmenu() {
+  if [ -f "$ROFI_DMENU_THEME" ]; then
+    rofi -dmenu -i -theme "$ROFI_DMENU_THEME" "$@"
+  else
+    rofi -dmenu -i "$@"
+  fi
+}
+
+list_wallpapers() {
+  find "$root" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
+    ! -path '*/.*' 2>/dev/null | sort
+}
+
+pick_file() {
+  local -a files lines
+  mapfile -t files < <(list_wallpapers)
+  if [ "${#files[@]}" -eq 0 ]; then
+    notify-send "Wallpaper" "No hay imágenes en $root (¿está montado?)"
+    return 1
+  fi
+  for i in "${!files[@]}"; do
+    lines+=("$i  $(basename "${files[$i]}")")
+  done
+  choice="$(printf '%s\n' "${lines[@]}" | rofi_dmenu -p "Wallpaper" -theme-str 'listview { lines: 16; }')"
+  [ -z "$choice" ] && return 1
+  idx="${choice%% *}"
+  [[ "$idx" =~ ^[0-9]+$ ]] && [ -f "${files[$idx]:-}" ] || {
+    notify-send "Wallpaper" "Selección no válida"
+    return 1
+  }
+  walltheme set "${files[$idx]}"
+}
+
+random_file() {
+  local f
+  f="$(list_wallpapers | shuf -n 1)"
+  if [ -z "$f" ]; then
+    notify-send "Wallpaper" "No hay imágenes en $root (¿está montado?)"
+    return 1
+  fi
+  walltheme set "$f"
+}
+
+label() { # mode polarity -> human label
+  local m p
+  [ "$1" = adaptive ] && m="Adaptativo" || m="Seguro"
+  [ "$2" = dark ] && p="oscuro" || p="claro"
+  echo "$m · $p"
+}
+
+main_menu() {
+  local mode=adaptive polarity=dark effective= wallpaper=
+  eval "$(walltheme status --shell)"
+
+  local mesg="$(basename "${wallpaper:-—}") · $(label "$mode" "$polarity")"
+  if [ "$mode" = adaptive ] && [ "$effective" = safe ]; then
+    mesg+="  (no era accesible → usando seguro)"
+  fi
+
+  local -a opts=("Elegir wallpaper" "Aleatorio")
+  local m p mark
+  for m in adaptive safe; do
+    for p in dark light; do
+      [ "$m" = "$mode" ] && [ "$p" = "$polarity" ] && mark="●" || mark="○"
+      opts+=("$mark $(label "$m" "$p")")
+    done
+  done
+
+  choice="$(printf '%s\n' "${opts[@]}" |
+    rofi_dmenu -p "Tema" -mesg "$mesg" -theme-str 'listview { lines: 6; }')"
+  [ -z "$choice" ] && exit 0
+
+  case "$choice" in
+  'Elegir wallpaper') pick_file || true ;;
+  'Aleatorio') random_file || true ;;
+  *)
+    case "${choice#* }" in
+    'Adaptativo · oscuro') walltheme set --mode adaptive --polarity dark ;;
+    'Adaptativo · claro') walltheme set --mode adaptive --polarity light ;;
+    'Seguro · oscuro') walltheme set --mode safe --polarity dark ;;
+    'Seguro · claro') walltheme set --mode safe --polarity light ;;
+    esac
+    ;;
+  esac
+}
+
+main_menu
