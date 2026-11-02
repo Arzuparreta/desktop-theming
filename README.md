@@ -28,6 +28,10 @@ wallpaper ──► analysis (median-cut palette, OKLCH)
 | **Adaptive** | Everything comes from the wallpaper. A monochrome wallpaper (e.g. green ASCII art) gives a monochrome theme. | Default |
 | **Safe** | Hand-designed palette that works with any wallpaper. Only risk-free parts adapt: faint background tint + accent (cursor, borders, selection). | Automatic fallback, or manual |
 
+Thunar and other GTK apps follow the polarity using Arc / Arc-Dark and
+`xsettingsd`, including already-open windows. Install `arc-gtk-theme` and
+`xsettingsd` for this integration. Existing GTK font/icon settings are preserved.
+
 Each mode comes in **dark** and **light** (light background, dark text,
 higher contrast targets for sunlight).
 
