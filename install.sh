@@ -41,7 +41,7 @@ if [ -f "$HOME/.zshrc" ] && ! grep -qF "$zline" "$HOME/.zshrc"; then
 fi
 
 # Dependencies check (no installs: just report).
-for cmd in python3 wal feh rofi kitty i3 polybar xrdb notify-send; do
+for cmd in python3 wal feh rofi kitty i3 polybar xrdb notify-send xsettingsd; do
   command -v "$cmd" >/dev/null || echo "missing $cmd"
 done
 python3 -c 'import PIL' 2>/dev/null || echo "missing python Pillow (python-pillow)"
