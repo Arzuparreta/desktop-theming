@@ -1,5 +1,10 @@
 # desktop-theming
 
+<img src="desktop_theming/ui/icon.svg" width="96" height="96" alt="Desktop Theming: Tux with three theme color swatches">
+
+Icon: Tux by Larry Ewing (lewing@isc.tamu.edu), created with The GIMP;
+cropped and combined with theme colors. See [artwork attribution](packaging/THIRD_PARTY.md#icon-artwork).
+
 A modular Linux desktop theming engine. It discovers an existing desktop,
 inspects terminal color sources and prepares reversible theme changes while
 preserving unrelated preferences.
