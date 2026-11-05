@@ -22,6 +22,11 @@ analysis = Analysis(
     excludes=['PySide6.QtWebEngineCore', 'PySide6.QtWebEngineQuick',
               'PySide6.QtWebEngineWidgets', 'tkinter'],
 )
+# Mesa/GLX loads host drivers into this process. An older bundled C++ runtime
+# can shadow the host's and lack symbols those drivers require (GLIBCXX_*).
+# Qt and the graphics drivers must share the host's libstdc++.
+analysis.binaries = [item for item in analysis.binaries
+                     if Path(item[0]).name != 'libstdc++.so.6']
 pyz = PYZ(analysis.pure)
 exe = EXE(pyz, analysis.scripts, [], exclude_binaries=True,
           name='desktop-theming', console=True, strip=False, upx=False)

@@ -43,7 +43,9 @@ jobs:
       - name: Prepare Qt runtime libraries on the build runner
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libegl1 libopengl0
+          sudo apt-get install --no-install-recommends -y \
+            libegl1 libopengl0 libgl1-mesa-dri xvfb xauth \
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxkbcommon-x11-0
       - name: Prepare isolated build tools
         run: |
           python -m venv .venv
@@ -62,6 +64,10 @@ jobs:
           echo "617aa77314d57c8b8e4fae9c3f0b35af7b30d5529cb69e98f64f92510ed98a46  $RUNNER_TEMP/appimage-runtime" | sha256sum --check
       - name: Build AppImage
         run: APPIMAGETOOL="$RUNNER_TEMP/appimagetool" APPIMAGE_RUNTIME="$RUNNER_TEMP/appimage-runtime" scripts/build-appimage.sh
+      - name: Check host graphics runtime compatibility
+        run: |
+          test ! -e dist/desktop-theming/_internal/libstdc++.so.6
+          APPIMAGE_EXTRACT_AND_RUN=1 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a dist/DesktopTheming-x86_64.AppImage --smoke-test-x11
       - name: Exercise bundled QML and engine in temporary HOME/XDG
         run: |
           APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
