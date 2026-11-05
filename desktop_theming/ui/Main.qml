@@ -172,6 +172,7 @@ ApplicationWindow {
                 spacing: 24
                 ScrollView {
                     id: sourceScroll
+                    objectName: "appearanceScroll"
                     Layout.fillWidth: true
                     Layout.preferredWidth: 460
                     Layout.minimumWidth: 330
@@ -183,22 +184,11 @@ ApplicationWindow {
                         spacing: 12
                         Label { text: "A palette for your desktop"; font.pixelSize: 19; color: "#e7e7eb" }
                         Body { visible: !imageFolder.path; Layout.fillWidth: true; text: "Choose colors, then select the applications to theme." }
-                        Rectangle {
+                        WallpaperPreview {
+                            id: wallpaperPreview
                             Layout.fillWidth: true
-                            visible: !imageFolder.path
-                            implicitHeight: 132
-                            radius: 8
-                            color: "#111318"
-                            clip: true
-                            Image {
-                                anchors.fill: parent
-                                source: s.wallpaperUrl
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                autoTransform: true
-                                sourceSize.width: 660
-                            }
-                            Body { anchors.centerIn: parent; visible: !s.profile.wallpaper; text: "No image selected" }
+                            source: s.wallpaperUrl
+                            availableHeight: sourceScroll.availableHeight
                         }
                         RowLayout {
                             Command { objectName: "chooseImage"; text: "Image…"; enabled: !s.busy && s.loaded; onClicked: wallpaperPicker.open() }
@@ -233,7 +223,7 @@ ApplicationWindow {
                             }
                             Rectangle {
                                 Layout.fillWidth: true
-                                implicitHeight: Math.max(120, sourceScroll.availableHeight - 195)
+                                implicitHeight: Math.max(180, sourceScroll.availableHeight - wallpaperPreview.height - 260)
                                 color: "#111318"
                                 border.color: "#3c3e45"
                                 radius: 6
