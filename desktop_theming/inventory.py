@@ -39,6 +39,8 @@ COMPONENTS = (
     ("fish", "fish", "Shell", ("fish",), ("fish",), ("fish/config.fish",)),
     ("feh", "feh", "Wallpaper", ("feh",), ("feh",), ()),
     ("swww", "swww", "Wallpaper", ("swww",), ("swww-daemon",), ()),
+    ("awww", "awww", "Wallpaper", ("awww",), ("awww-daemon",), ()),
+    ("hyprpaper", "hyprpaper", "Wallpaper", ("hyprctl",), ("hyprpaper",), ()),
     ("swaybg", "swaybg", "Wallpaper", ("swaybg",), ("swaybg",), ()),
 )
 SUPPORTED = {"kitty", "ghostty"}

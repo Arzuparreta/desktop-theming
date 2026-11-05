@@ -55,20 +55,22 @@ exact file changes, approval, disconnection and recovery. No user needs a termin
 command to finish those workflows. A future MCP interface and small fallback CLI
 for agents will use the same engine.
 
-Kitty and Ghostty are the first managed integrations. Other components are
-reported as discovery-only, not advertised as fully supported. Connecting and
+Kitty and Ghostty are the first managed integrations. Wallpaper changes use automatically selected, session-specific adapters with
+reviewed application and conflict-checked undo. Other component themes remain
+discovery-only. See WALLPAPER.md for capability and validation limits. Connecting and
 disconnecting an integration are both reviewed, reversible changes.
 
 Discovery must not alter desktop settings. Applying a plan changes only the
-selected integrations and the engine's own profile/history. No automatic package
-installation, process signalling, session reload or wallpaper replacement is
-included in this foundation.
+selected integrations, an explicitly selected desktop wallpaper and the engine's
+own profile/history. No automatic package installation, process signalling or
+session reload is included. Probing never changes the wallpaper.
 
 ## Next outcomes
 
 1. Extend terminal support (Alacritty and foot) and named profile composition.
 2. Connect launchers, notifications and bars to the same palette.
-3. Add wallpaper and session integrations for X11, Sway and Hyprland.
+3. Extend wallpaper coverage to additional protocols and session versions,
+   retaining restorable state and conflict checks.
 4. Add environment-specific GTK, GNOME, KDE Plasma and Xfce integrations,
    with individual capability and validation records.
 5. Add explicit, reviewable dependency installation only when useful.

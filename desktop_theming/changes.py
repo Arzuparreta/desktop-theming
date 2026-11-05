@@ -2,6 +2,7 @@
 
 import base64
 import contextlib
+import copy
 import difflib
 import fcntl
 import hashlib
@@ -12,6 +13,8 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+from . import wallpaper
 
 
 def digest(value):
@@ -152,6 +155,26 @@ def check_inputs(inputs):
                              "Review a fresh plan; no files were changed.")
 
 
+def restore_wallpaper(paths, action):
+    previous = copy.deepcopy(action['before'])
+    wallpaper.restore(action)
+    if action['backend'] != 'feh' or previous == action['before']:
+        return
+    # Restoring an X11 image allocates a fresh pixmap. Rebind the matching
+    # predecessor so ordered undo still checks the real, current pixmap identity.
+    for item in history(paths):
+        if item['status'] != 'applied':
+            continue
+        path = paths.history / (item['id'] + '.json')
+        journal = json.loads(path.read_text())
+        older = journal.get('wallpaper_action')
+        if (older and older['backend'] == 'feh' and older['session'] == action['session']
+                and older['after'] == previous):
+            older['after'] = copy.deepcopy(action['before'])
+            write_journal(path, journal)
+            break
+
+
 def apply(paths, plan):
     with locked(paths):
         pending = [item for item in history(paths) if item["status"] in
@@ -161,12 +184,15 @@ def apply(paths, plan):
                              f"Recover transaction {pending[0]['id']} from change history before applying again.")
         check_inputs(plan.get("inputs", []))
         check_changes(plan["changes"], "before", paths)
-        if not plan["changes"]:
+        action = copy.deepcopy(plan.get("wallpaper_action"))
+        if action:
+            wallpaper.check(action, "before")
+        if not plan["changes"] and not action:
             return {"id": None, "status": "unchanged"}
         ident = uuid.uuid4().hex
         journal = {"id": ident, "created": datetime.now(timezone.utc).isoformat(),
                    "status": "prepared", "components": plan["profile"]["components"],
-                   "changes": plan["changes"]}
+                   "changes": plan["changes"], "wallpaper_action": action}
         journal_path = paths.history / f"{ident}.json"
         write_journal(journal_path, journal)
         written = []
@@ -176,10 +202,18 @@ def apply(paths, plan):
                 check_changes([item], "before", paths)
                 atomic_restore(Path(item["path"]), item["after"])
                 written.append(item)
+            if action:
+                wallpaper.apply(action)
+                write_journal(journal_path, journal)
             journal["status"] = "applied"
             write_journal(journal_path, journal)
         except Exception:
             journal["status"] = "rolled-back"
+            if action:
+                try:
+                    restore_wallpaper(paths, action)
+                except (OSError, ValueError):
+                    journal["status"] = "recovery-needed"
             for item in reversed(written):
                 try:
                     check_changes([item], "after", paths)
@@ -203,6 +237,9 @@ def review_undo(paths, ident, *, recover=False):
     interrupted = journal["status"] != "applied"
     if interrupted != recover:
         raise ValueError("Use recovery for interrupted changes, undo for applied changes.")
+    action = journal.get("wallpaper_action")
+    if action:
+        wallpaper.check(action, "after", partial=interrupted)
     proposed = []
     for item in reversed(journal["changes"]):
         target = Path(item["path"])
@@ -216,7 +253,7 @@ def review_undo(paths, ident, *, recover=False):
         if reverse:
             proposed.append(reverse)
     payload = {"transaction": ident, "recover": recover,
-               "journal": digest(journal), "changes": proposed}
+               "journal": digest(journal), "changes": proposed, "wallpaper_action": action}
     return dict(payload, id=digest(payload))
 
 
@@ -248,8 +285,14 @@ def undo(paths, ident, *, recover=False, reviewed=None):
             if current not in allowed:
                 raise ValueError(f"Cannot undo: {target} was edited after application. "
                                  "Your edits have been preserved.")
+        action = journal.get("wallpaper_action")
+        if action:
+            wallpaper.check(action, "after", partial=interrupted)
         journal["status"] = "undoing"
         write_journal(path, journal)
+        if action:
+            restore_wallpaper(paths, action)
+            write_journal(path, journal)
         for item in reversed(journal["changes"]):
             target = Path(item["path"])
             # Recheck before writing to avoid overwriting edits during undo.

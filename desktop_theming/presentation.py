@@ -76,7 +76,9 @@ def review_summary(paths, plan, previous):
         result.append("Save this palette for later. No applications will be themed.")
     elif selected:
         result.append("Reopen the selected terminal or use its reload action to see the new colors.")
-    if not plan["changes"]:
+    if plan.get("wallpaper_action"):
+        result.append("Set the selected image as your desktop wallpaper. Previous backgrounds are kept for undo.")
+    if not plan["changes"] and not plan.get("wallpaper_action"):
         return ["Everything already matches these choices. There is nothing to apply."]
     return result
 

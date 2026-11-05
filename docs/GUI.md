@@ -29,7 +29,9 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
 
 - **Appearance:** choose an image as a color source, select dark/light and
   image-derived/default colors, and inspect the terminal sample and all sixteen ANSI
-  colors. This does not replace the desktop wallpaper. Preview failures are
+  colors. Choosing an image enables **Set as desktop wallpaper**; uncheck it to
+  use the image only for colors. The session adapter is chosen automatically at
+  review, and only approval changes the wallpaper. Preview failures are
   visible; fallback palettes include the engine's explanation.
 - **Components:** select **Use palette** beside Kitty or Ghostty. The application
   checks the current configuration first. A linked config or existing colors
@@ -47,7 +49,10 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
   bypassing engine checks. Export remains available and explicitly does not
   connect the terminal; manual inclusion is still necessary for an exported file.
 - **Review:** begins with a plain-language summary: palette, affected terminals,
-  preserved preferences, link consequences and how to see the colors. Each file
+  preserved preferences, link consequences and how to see the colors. Wallpaper
+  changes include previous/proposed values per screen or setting. If no safe
+  adapter is available, the review explains why; uncheck the wallpaper choice
+  to apply colors only. See [wallpaper compatibility](WALLPAPER.md). Each file
   has a readable label, full path and full selectable diff, including type,
   permissions, links, generated themes, restoration data and profile. Additional
   engine notes are optional. Apply authorizes only the exact reviewed plan.

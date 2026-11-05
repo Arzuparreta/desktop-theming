@@ -328,6 +328,50 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.paths.config.exists())
         self.assertEqual(self.messages, [])
 
+    def test_wallpaper_selection_review_apply_and_undo_use_the_same_flow(self):
+        from PIL import Image
+
+        from desktop_theming import wallpaper
+
+        image = self.root / "chosen.png"
+        Image.new("RGB", (8, 8), "#224466").save(image)
+        current = {"picture-uri": "file:///previous.png"}
+        before = dict(current)
+
+        def detect(*args, **kwargs):
+            return {"available": True, "action": {
+                "backend": "gsettings", "tool": "/fake/gsettings", "schema": "test",
+                "before": dict(current), "after": {"picture-uri": image.as_uri()},
+                "session": wallpaper.session_token(), "image": str(image), "image_digest": "test"}}
+
+        def write(action, values):
+            current.update(values)
+
+        with (patch.object(wallpaper, "detect", side_effect=detect),
+              patch.object(wallpaper, "read", side_effect=lambda _: dict(current)),
+              patch.object(wallpaper, "write", side_effect=write),
+              patch.object(wallpaper, "image_digest", return_value="test")):
+            self.controller.chooseWallpaper(QUrl.fromLocalFile(str(image)).toString())
+            self.settle()
+            self.assertTrue(self.controller.state["profile"]["set_wallpaper"])
+            self.controller.review()
+            self.settle()
+            self.assertEqual(current, before)
+            self.assertTrue(any(c["path"] == "Desktop wallpaper"
+                                for c in self.controller.state["review"]["changes"]))
+            self.controller.approve()
+            self.settle()
+            self.assertEqual(current["picture-uri"], image.as_uri())
+            ident = self.controller.state["overview"]["history"][0]["id"]
+            self.controller.reviewUndo(ident, False)
+            self.settle()
+            self.controller.approve()
+            self.settle()
+            self.assertEqual(current, before)
+            self.assertFalse(self.controller.state["error"])
+            self.controller.setWallpaperEnabled(False)
+            self.assertFalse(self.controller.state["profile"]["set_wallpaper"])
+
     def test_cancelling_connection_after_a_palette_edit_resumes_preview(self):
         self.linked_config()
         self.controller.setOption("polarity", "light")
