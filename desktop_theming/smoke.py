@@ -18,6 +18,12 @@ def isolated_environment():
                       XDG_RUNTIME_DIR=str(root / "runtime"), PATH=str(binaries),
                       QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
     (root / "runtime").mkdir(mode=0o700)
+    original = root / "dotfiles/kitty.conf"
+    original.parent.mkdir()
+    original.write_text("font_size 16\nbackground #101010\n")
+    config = root / "config/kitty/kitty.conf"
+    config.parent.mkdir(parents=True)
+    config.symlink_to(original)
     return temporary
 
 
@@ -42,34 +48,44 @@ def exercise(app, engine, controller):
             if step == 0:
                 if not s["loaded"] or not s["palette"]:
                     raise ValueError("Initial preview is missing")
-                if controller.paths.config.exists() or controller.paths.state.exists():
+                if controller.paths.profile.exists() or controller.paths.state.exists():
                     raise ValueError("Discovery wrote local data")
                 QMetaObject.invokeMethod(engine.rootObjects()[0], "openWallpaperPicker")
             elif step == 1:
                 QMetaObject.invokeMethod(engine.rootObjects()[0], "closeWallpaperPicker")
                 controller.selectComponent("kitty", True)
             elif step == 2:
-                controller.review()
+                if not s["connection"].get("linked") or not s["connection"].get("existingColors"):
+                    raise ValueError("Required connection decisions were not presented")
+                if s["profile"]["components"] or controller.paths.profile.exists():
+                    raise ValueError("Selection changed before consent")
+                controller.confirmConnection(True, True)
             elif step == 3:
+                controller.review()
+            elif step == 4:
                 if not s["review"]["changes"] or controller.paths.profile.exists():
                     raise ValueError("Review did not remain read-only")
                 controller.approve()
-            elif step == 4:
+            elif step == 5:
                 if not controller.paths.profile.exists():
                     raise ValueError("Application did not create the profile")
                 controller.reviewUndo(s["overview"]["history"][0]["id"], False)
-            elif step == 5:
-                controller.approve()
             elif step == 6:
+                controller.approve()
+            elif step == 7:
                 if controller.paths.profile.exists():
                     raise ValueError("Undo did not restore the previous state")
+                if not (controller.paths.config / "kitty/kitty.conf").is_symlink():
+                    raise ValueError("Undo did not restore the original link")
+                if (controller.paths.home / "dotfiles/kitty.conf").read_text() != "font_size 16\nbackground #101010\n":
+                    raise ValueError("The original linked file changed")
                 controller.renderExport("ghostty")
             else:
                 if "palette = 0=" not in s["exportText"]:
                     raise ValueError("Standalone export failed")
                 if not engine.rootObjects():
                     raise ValueError("QML window is missing")
-                print("PASS: QML, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
+                print("PASS: QML, guided connection, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
                 timer.stop()
                 app.exit(0)
                 return

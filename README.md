@@ -7,6 +7,8 @@ preserving unrelated preferences.
 **Current state:** a local PySide6 / Qt Quick application over the Python engine.
 Choose a palette, inspect components and color sources, review exact changes,
 apply, disconnect, export, undo and recover without configuration commands.
+Selecting a terminal explains existing colors and linked configurations before
+review. Technical details are optional; consent never changes files by itself.
 Only Kitty and Ghostty have managed theme integrations; other components are
 discovery-only. MCP and a small fallback CLI for agents are planned later.
 

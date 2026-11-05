@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 
-from . import changes, service, theme
+from . import changes, presentation, service, theme
 from .paths import Paths
 
 
@@ -39,7 +39,7 @@ class Controller(QObject):
         self._state = {"busy": False, "loaded": False, "error": "", "notice": "",
                        "overview": {"components": [], "history": [], "session": {}},
                        "profile": copy.deepcopy(service.DEFAULT_PROFILE), "palette": {},
-                       "review": {}, "exportText": "", "wallpaperUrl": ""}
+                       "review": {}, "exportText": "", "exportComponent": "", "wallpaperUrl": "", "connection": {}, "problem": {}, "activity": ""}
         self._review = None
         self._work = None
         self.timer = QTimer(self)
@@ -58,11 +58,16 @@ class Controller(QObject):
         self._state.update(values)
         self.changed.emit()
 
-    def start(self, operation, complete, *, clear_notice=True):
+    def start(self, operation, complete, *, clear_notice=True, context="refresh"):
         if self._state["busy"]:
             return
         self.timer.stop()
-        self.publish(busy=True, error="", **({"notice": ""} if clear_notice else {}))
+        self._context = context
+        self.publish(busy=True, error="", problem={}, activity={
+            "preview": "Building palette…", "review": "Checking changes…",
+            "apply": "Applying reviewed changes…", "restore": "Checking restoration…",
+            "export": "Saving theme…", "refresh": "Checking desktop…",
+        }[context], **({"notice": ""} if clear_notice else {}))
         self._work = Work(operation)
         self._complete = complete
         self._work.signals.finished.connect(self.finished)
@@ -74,20 +79,24 @@ class Controller(QObject):
         self._state["busy"] = False
         if error:
             self._review = None
-            self.publish(error=error, review={})
+            self.publish(error=error, problem=presentation.problem(self._context, error), review={})
         else:
             try:
                 self._complete(result)
             except Exception as exc:
-                self.publish(error=str(exc))
+                self.publish(error=str(exc), problem=presentation.problem(self._context, str(exc)))
         self.changed.emit()
 
     @Slot()
     def refresh(self):
+        draft = (copy.deepcopy(self._state["profile"]) if self._state["loaded"] and
+                 self._state["profile"] != self._state["overview"].get("profile") else None)
+
         def complete(result):
             self._review = None
-            self.publish(overview=result, profile=copy.deepcopy(result["profile"]),
-                         review={}, loaded=True, exportText="", palette={})
+            self.publish(overview=result, profile=draft or copy.deepcopy(result["profile"]),
+                         review={}, connection={}, loaded=True, exportText="", palette={},
+                         notice="Desktop checked. Pending choices kept." if draft else "")
             self.timer.start()
         self.start(lambda: service.overview(self.paths), complete)
 
@@ -96,7 +105,7 @@ class Controller(QObject):
             return
         self._review = None
         self.publish(profile=service.validate_profile(profile), review={}, palette={},
-                     exportText="", error="", notice="")
+                     exportText="", exportComponent="", error="", problem={}, notice="")
         self.timer.start()
 
     @Slot(str, str)
@@ -113,51 +122,92 @@ class Controller(QObject):
 
     @Slot(str, bool)
     def selectComponent(self, component, selected):
-        profile = copy.deepcopy(self._state["profile"])
-        items = set(profile["components"])
+        if self._state["busy"] or not self._state["loaded"]:
+            return
         if selected:
-            items.add(component)
+            def complete(info):
+                if info["blocked"] or info["linked"] or info["existingColors"]:
+                    self.publish(connection=dict(info, continueReview=False), review={})
+                else:
+                    self.select_ready(component)
+            self.start(lambda: presentation.connection(self.paths, component), complete, context="review")
         else:
-            items.discard(component)
-        profile["components"] = sorted(items)
+            profile = copy.deepcopy(self._state["profile"])
+            profile["components"] = [c for c in profile["components"] if c != component]
+            self.edit(profile)
+
+    def select_ready(self, component):
+        profile = copy.deepcopy(self._state["profile"])
+        profile["components"] = sorted(set(profile["components"]) | {component})
         self.edit(profile)
 
-    @Slot(str, str, bool)
-    def resolve(self, component, option, enabled):
+    @Slot(bool, bool)
+    def confirmConnection(self, local_copy, replace_colors):
+        info = self._state["connection"]
+        if (not info or self._state["busy"] or info["blocked"]
+                or info["linked"] and not local_copy or info["existingColors"] and not replace_colors):
+            return
         profile = copy.deepcopy(self._state["profile"])
-        resolution = profile["resolutions"].setdefault(component, {})
-        if option == "replace_colors":
-            resolution[option] = enabled
-        elif option == "symlink":
-            resolution[option] = "detach" if enabled else "preserve"
+        profile["components"] = sorted(set(profile["components"]) | {info["id"]})
+        profile["resolutions"][info["id"]] = {
+            "symlink": "detach" if info["linked"] and local_copy else "preserve",
+            "replace_colors": info["existingColors"] and replace_colors,
+        }
+        self.publish(connection={})
         self.edit(profile)
+        if info["continueReview"]:
+            self.review()
+
+    @Slot()
+    def cancelConnection(self):
+        if not self._state["busy"]:
+            self.publish(connection={})
+            if self._state["loaded"] and not self._state["palette"]:
+                self.timer.start()
 
     @Slot()
     def preview(self):
         if not self._state["loaded"]:
             return
         profile = copy.deepcopy(self._state["profile"])
-        self.start(lambda: theme.palette(profile), lambda result: self.publish(palette=result), clear_notice=False)
+        self.start(lambda: theme.palette(profile), lambda result: self.publish(palette=result), clear_notice=False, context="preview")
 
     @Slot()
     def review(self):
+        if not self._state["loaded"]:
+            return
         profile = copy.deepcopy(self._state["profile"])
 
-        def complete(plan):
+        def operation():
+            for component in profile["components"]:
+                info = presentation.connection(self.paths, component)
+                if presentation.needs_decision(info, profile):
+                    return {"connection": dict(info, continueReview=True)}
+            previous = service.load_profile(self.paths)
+            plan = service.make_plan(self.paths, profile)
+            return {"plan": plan, "summary": presentation.review_summary(self.paths, plan, previous)}
+
+        def complete(result):
+            if "connection" in result:
+                self._review = None
+                self.publish(connection=result["connection"], review={})
+                return
+            plan = result["plan"]
             self._review = ("apply", plan)
-            self.publish(review={"kind": "apply", "title": "Review changes",
-                                 "changes": plan["changes"], "warnings": plan["warnings"]},
-                         palette=plan["palette"])
-        self.start(lambda: service.make_plan(self.paths, profile), complete)
+            files = [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]]
+            self.publish(review={"kind": "apply", "title": "Review changes", "summary": result["summary"],
+                                 "changes": files, "warnings": plan["warnings"]}, palette=plan["palette"])
+        self.start(operation, complete, context="review")
 
     @Slot(str, bool)
     def reviewUndo(self, ident, recover):
         def complete(plan):
             self._review = ("undo", plan)
             self.publish(review={"kind": "undo", "title": "Recover changes" if recover else "Undo changes",
-                                 "changes": plan["changes"],
-                                 "warnings": ["Restore these files. Later edits are never overwritten."]})
-        self.start(lambda: changes.review_undo(self.paths, ident, recover=recover), complete)
+                                 "changes": [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]],
+                                 "summary": ["Restore the previous configuration shown below. Later edits are preserved."],
+                                 "warnings": []})
+        self.start(lambda: changes.review_undo(self.paths, ident, recover=recover), complete, context="restore")
 
     @Slot()
     def cancelReview(self):
@@ -188,13 +238,22 @@ class Controller(QObject):
                                  if result["status"] == "applied" else "Previous configuration restored."))
             # Keep the completion notice while regenerating the preview.
             self.timer.start()
-        self.start(operation, complete)
+        self.start(operation, complete, context="apply" if kind == "apply" else "restore")
 
     @Slot(str)
     def renderExport(self, component):
+        if self._state["busy"]:
+            return
+        self.publish(exportText="", exportComponent="")
         profile = copy.deepcopy(self._state["profile"])
-        self.start(lambda: theme.render(component, theme.palette(profile)),
-                   lambda text: self.publish(exportText=text))
+        def operation():
+            value = theme.palette(profile)
+            return value, theme.render(component, value)
+
+        def complete(result):
+            value, text = result
+            self.publish(palette=value, exportText=text, exportComponent=component)
+        self.start(operation, complete, context="preview")
 
     @Slot(str)
     def copyText(self, text):
@@ -213,4 +272,4 @@ class Controller(QObject):
             with os.fdopen(fd, "w") as stream:
                 stream.write(text)
             return str(path)
-        self.start(operation, lambda value: self.publish(notice=f"Theme saved to {value}"))
+        self.start(operation, lambda value: self.publish(notice=f"Theme saved to {value}"), context="export")

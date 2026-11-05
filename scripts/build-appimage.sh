@@ -37,4 +37,9 @@ EOF
 chmod +x "$appdir/AppRun"
 export ARCH="${ARCH:-$(uname -m)}"
 export APPIMAGE_EXTRACT_AND_RUN=1
-"$appimage_tool" --runtime-file "$appimage_runtime" "$appdir" "$repo/dist/DesktopTheming-$ARCH.AppImage"
+# Publish by rename so an already-running AppImage keeps its original inode.
+artifact="$repo/dist/DesktopTheming-$ARCH.AppImage"
+partial="$repo/dist/.DesktopTheming-$ARCH-$$.AppImage"
+trap 'rm -f -- "$partial"' EXIT
+"$appimage_tool" --runtime-file "$appimage_runtime" "$appdir" "$partial"
+mv -f -- "$partial" "$artifact"

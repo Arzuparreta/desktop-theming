@@ -7,6 +7,7 @@ MCP and a small fallback CLI for agents are future adapters.
 
 ## Layout
 
+- `desktop_theming/presentation.py`: read-only explanations, connection preflight and review summaries.
 - `desktop_theming/gui.py`, `__main__.py`, `ui/`: asynchronous Qt adapter, launcher and QML.
 - `desktop_theming/smoke.py`: bundled diagnostic using a temporary HOME/XDG/PATH.
 - `packaging/`, `scripts/build-appimage.sh`: relocatable payload and AppImage build.
@@ -46,7 +47,7 @@ rendering. The caller must display the proposed changes and obtain explicit user
 approval before apply, undo or recovery. Application does not trust arbitrary
 serialized file operations: it regenerates the plan and checks its complete data.
 
-For existing manual configuration, the GUI exposes source evidence,
+For existing manual configuration, the GUI presents required choices immediately when selecting a terminal, with source evidence,
 unresolved issues, explicit color replacement and symlink choices through the
 profile's `resolutions`. See [configuration semantics](CONFIGURATION.md). The engine is independent of the Qt interface.
 
