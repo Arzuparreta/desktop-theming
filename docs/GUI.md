@@ -29,9 +29,17 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
 
 - **Appearance:** choose an image as a color source, select dark/light and
   image-derived/default colors, and inspect the terminal sample and all sixteen ANSI
-  colors. Choosing an image enables **Set as desktop wallpaper**; uncheck it to
-  use the image only for colors. The session adapter is chosen automatically at
-  review, and only approval changes the wallpaper. Preview failures are
+  colors. **Set as desktop wallpaper** is checked by default for a new profile;
+  saved choices and an unchecked option are preserved when switching images.
+  Choose **Image…** for one file or **Folder…** for a sorted, scrollable list of
+  PNG, JPEG, WebP, BMP and TIFF images directly inside a directory (no recursion).
+  The list stays open while selecting images and previewing colors, with small,
+  asynchronously decoded thumbnails beside each filename. Folder selection only
+  lists files; choose a row to preview its palette. Tab focuses the list, arrows
+  navigate, and Enter or Space selects an image. Folder and settings panels scroll
+  independently on small windows, and the terminal preview and ANSI swatches are
+  compact. Choose the folder again to refresh its contents. The session adapter
+  is chosen automatically at review, and only approval changes the wallpaper. Preview failures are
   visible; fallback palettes include the engine's explanation.
 - **Components:** select **Use palette** beside Kitty or Ghostty. The application
   checks the current configuration first. A linked config or existing colors
@@ -87,10 +95,12 @@ bash -n install.sh scripts/build-appimage.sh
 Qt tests run offscreen with software rendering and disposable HOME/XDG roots.
 They exercise actual window approval buttons, read-only discovery/preview,
 connection, disconnection, undo, interrupted recovery, stale review rejection,
-immediately visible color/link decisions, cancellation without consent, linked
-folder blocking, refresh without lost choices and safe standalone exports.
+image folders with special characters, mixed-case extensions, keyboard selection,
+retained list scrolling, immediately visible color/link decisions, cancellation
+without consent, linked folder blocking, refresh without lost choices and safe standalone exports.
 The bundled smoke test always replaces HOME/XDG/PATH with a temporary fixture before creating Qt. It
-loads the actual QML and exercises guided connection from a linked configuration,
+loads the actual QML and exercises image/folder dialogs, the thumbnail list, image
+selection and guided connection from a linked configuration,
 review, apply, link restoration and export without using the real desktop.
 
 Offscreen checks do not establish appearance in a real Kitty/Ghostty process,

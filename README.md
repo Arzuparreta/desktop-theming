@@ -24,9 +24,11 @@ python3 -m venv .venv
 ```
 
 Opening the application and previewing colors do not change desktop settings.
-Choosing an image enables **Set as desktop wallpaper**; uncheck it to use only
-its palette. Review and approve to change the wallpaper. The GUI
-runs without a server or background service. [GUI workflows](docs/GUI.md) and
+**Set as desktop wallpaper** is checked by default for a new profile; uncheck
+it to use only the image’s palette. Your choice is kept when switching images.
+Choose **Folder…** to browse its images in a persistent list with small thumbnails.
+Review and approve to change the wallpaper. The GUI runs without a server or
+background service. [GUI workflows](docs/GUI.md) and
 [AppImage builds, artifacts and compatibility](docs/APPIMAGE.md) describe usage
 and distribution. The AppImage workflow builds an artifact on GitHub Actions.
 
