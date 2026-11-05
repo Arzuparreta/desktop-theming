@@ -30,15 +30,17 @@ class Work(QRunnable):
 
 class Controller(QObject):
     changed = Signal()
+    folderChanged = Signal()
 
     def __init__(self, paths=None):
         super().__init__()
         self.paths = paths or Paths.current()
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
+        self._folder = {"path": "", "images": []}
         self._state = {"busy": False, "loaded": False, "error": "", "notice": "",
                        "overview": {"components": [], "history": [], "session": {}},
-                       "profile": copy.deepcopy(service.DEFAULT_PROFILE), "palette": {},
+                       "profile": dict(copy.deepcopy(service.DEFAULT_PROFILE), set_wallpaper=True), "palette": {},
                        "review": {}, "exportText": "", "exportComponent": "", "wallpaperUrl": "", "connection": {}, "problem": {}, "activity": ""}
         self._review = None
         self._work = None
@@ -50,6 +52,12 @@ class Controller(QObject):
     @Property("QVariantMap", notify=changed)
     def state(self):
         return self._state
+
+    @Property("QVariantMap", notify=folderChanged)
+    def imageFolder(self):
+        # A separate notification keeps the list and scroll position stable while
+        # selecting images, generating palettes or refreshing desktop discovery.
+        return self._folder
 
     def publish(self, **values):
         if "profile" in values:
@@ -67,6 +75,7 @@ class Controller(QObject):
             "preview": "Building palette…", "review": "Checking changes…",
             "apply": "Applying reviewed changes…", "restore": "Checking restoration…",
             "export": "Saving theme…", "refresh": "Checking desktop…",
+            "folder": "Reading image folder…",
         }[context], **({"notice": ""} if clear_notice else {}))
         self._work = Work(operation)
         self._complete = complete
@@ -94,7 +103,10 @@ class Controller(QObject):
 
         def complete(result):
             self._review = None
-            self.publish(overview=result, profile=draft or copy.deepcopy(result["profile"]),
+            profile = draft or copy.deepcopy(result["profile"])
+            if not self._state["loaded"] and not self.paths.profile.exists():
+                profile["set_wallpaper"] = True
+            self.publish(overview=result, profile=profile,
                          review={}, connection={}, loaded=True, exportText="", palette={},
                          notice="Desktop checked. Pending choices kept." if draft else "")
             self.timer.start()
@@ -126,8 +138,29 @@ class Controller(QObject):
     def chooseWallpaper(self, url):
         profile = copy.deepcopy(self._state["profile"])
         profile["wallpaper"] = QUrl(url).toLocalFile()
-        profile["set_wallpaper"] = True
         self.edit(profile)
+
+    @Slot(str)
+    def chooseFolder(self, url):
+        def operation():
+            local = QUrl(url).toLocalFile()
+            if not local:
+                raise ValueError("Choose a local image folder.")
+            folder = Path(local)
+            extensions = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+            images = [{"fileName": p.name, "filePath": str(p),
+                       "fileUrl": QUrl.fromLocalFile(str(p)).toString()}
+                      for p in sorted(folder.iterdir(), key=lambda p: (p.name.casefold(), p.name))
+                      if p.suffix.lower() in extensions and p.is_file() and os.access(p, os.R_OK)]
+            return {"path": str(folder), "images": images}
+
+        def complete(result):
+            self._folder = result
+            self.folderChanged.emit()
+            if not self._state["palette"]:
+                self.timer.start()
+
+        self.start(operation, complete, context="folder")
 
     @Slot(str, bool)
     def selectComponent(self, component, selected):
