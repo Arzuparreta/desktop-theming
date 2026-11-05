@@ -5,6 +5,10 @@ from pathlib import Path
 
 
 def main():
+    if '--smoke-test-wallpaper' in sys.argv[1:] or '--smoke-test-feh' in sys.argv[1:]:
+        from .smoke_wallpaper import run
+
+        return run(decoder_only='--smoke-test-wallpaper' not in sys.argv[1:])
     graphics_diagnostic = "--smoke-test-x11" in sys.argv[1:]
     diagnostic = "--smoke-test" in sys.argv[1:] or graphics_diagnostic
     temporary = None

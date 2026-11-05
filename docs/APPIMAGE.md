@@ -4,6 +4,9 @@ AppImage fits this local control center: the payload contains Python, the engine
 Pillow, PySide6, Qt libraries/QML modules and platform plugins. It uses the host's
 PATH and HOME/XDG directories without a broker or sandbox. Opening it only reads
 configuration; changes still require review and approval in the GUI.
+Running an AppImage does not install packages, a second copy or a background
+service. Local and release AppImages use the same HOME/XDG profile and history.
+Replacing the executable does not require deleting that data.
 
 AppImage is a distribution container, not a universal Linux ABI. Build on the
 oldest supported base and test the result on each intended distribution. The CI
@@ -51,6 +54,11 @@ APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
 # Exercise X11/OpenGL with the host's graphics drivers, also in temporary HOME/XDG.
 # Requires an accessible X11 display; CI uses Xvfb and Mesa's software GL driver.
 APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-x11
+# Read-only decode with the installed host feh; never changes the caller's wallpaper.
+APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-feh
+# Requires existing feh, xprop and Xvfb. Starts and stops its own private X server.
+# Tests actual reviewed Kitty + wallpaper apply, undo and failing-child rollback.
+APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-wallpaper
 sha256sum dist/DesktopTheming-x86_64.AppImage
 ```
 
@@ -78,6 +86,22 @@ LD_PRELOAD=/usr/lib/libstdc++.so.6 ./DesktopTheming-x86_64.AppImage
 This selects the installed system runtime for that invocation only. The path
 varies on other distributions. Updated builds do not require this workaround.
 
+### Release 0.1.1 wallpaper failure with host tools
+
+The frozen Python process sets private library and Qt/QML search paths. Passing
+those paths to system tools can make a newer `feh`/libcurl load the bundle's older
+OpenSSL and fail with `OPENSSL_3.5.0 not found`. This can affect applying wallpaper
+while a local build using newer libraries works. It is unrelated to duplicate
+installations. Version 0.1.2 restores the original host library path and removes
+private Qt/QML entries only for child processes. The GUI retains its own bundle
+environment. Command failures include the child's stderr in the error details.
+
+CI now exercises real host feh on a private Xvfb, including reviewed terminal and
+wallpaper changes, undo and rollback after a failing setter. The read-only feh
+diagnostic can also verify the downloaded release on a newer host without
+changing that desktop. The original GUI smoke test covers terminal application;
+it did not establish that host wallpaper tools could load their own libraries.
+
 Upstream references: [AppImage concepts](https://docs.appimage.org/introduction/concepts.html),
 [compatibility practices](https://docs.appimage.org/reference/best-practices.html),
 and [Qt deployment with PyInstaller](https://doc.qt.io/qtforpython-6/deployment/deployment-pyinstaller.html).
@@ -95,13 +119,15 @@ To cut a release:
 1. Update `desktop_theming.__version__` if necessary, run the required checks,
    and commit and push all completed changes to `main`.
 2. Fetch GitHub's current `main` and launch:
-   `gh workflow run appimage.yml --ref main -f version=0.1.1`
+   `gh workflow run appimage.yml --ref main -f version=0.1.2`
    (replace the version with the source version).
 3. Wait for the workflow to finish. Verify the public release tag resolves to
    the built source commit, download both assets, check the SHA-256 and run
    `APPIMAGE_EXTRACT_AND_RUN=1 ./DesktopTheming-x86_64.AppImage --smoke-test`.
    With an accessible X11 display, also run `--smoke-test-x11` on the downloaded
    asset to verify host graphics initialization.
+   Run `--smoke-test-feh` when feh is installed. With feh, xprop and Xvfb available,
+   run `--smoke-test-wallpaper` for apply/undo on its own private display.
 4. Report the public release URL and verification results.
 
 The workflow rejects dispatches from other branches, version mismatches and

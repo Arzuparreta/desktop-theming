@@ -8,18 +8,48 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from . import inventory
 
 
+def host_environment():
+    """Keep bundle libraries private to this process, not host wallpaper tools."""
+    env = os.environ.copy()
+    if not getattr(sys, 'frozen', False):
+        return env
+    original = env.pop('LD_LIBRARY_PATH_ORIG', None)
+    if original is None:
+        env.pop('LD_LIBRARY_PATH', None)
+    else:
+        env['LD_LIBRARY_PATH'] = original
+    bundle = Path(sys._MEIPASS).resolve()
+    for key in ('QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH', 'QML_IMPORT_PATH', 'QML2_IMPORT_PATH'):
+        if key not in env:
+            continue
+        entries = [entry for entry in env[key].split(os.pathsep)
+                   if entry and not Path(entry).resolve().is_relative_to(bundle)]
+        if entries:
+            env[key] = os.pathsep.join(entries)
+        else:
+            env.pop(key)
+    return env
+
+
 def command(args):
     try:
-        result = subprocess.run(args, capture_output=True, text=True, timeout=15, check=True)
+        result = subprocess.run(args, capture_output=True, text=True, timeout=15, check=True,
+                                env=host_environment())
         return result.stdout.strip()
     except (OSError, subprocess.SubprocessError) as exc:
-        raise ValueError(f"Wallpaper command failed ({args[0]}): {exc}") from exc
+        detail = getattr(exc, 'stderr', None) or ''
+        if isinstance(detail, bytes):
+            detail = detail.decode(errors='replace')
+        detail = detail.strip()[:4096]
+        raise ValueError(f"Wallpaper command failed ({args[0]}): {exc}" +
+                         (f"\n{detail}" if detail else '')) from exc
 
 
 def image_digest(path):
