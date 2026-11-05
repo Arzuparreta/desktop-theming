@@ -504,13 +504,21 @@ class GuiTests(unittest.TestCase):
             return rendered.pixelColor(round((point.x() + frame.width() * x) * scale),
                                        round((point.y() + frame.height() * y) * scale)).name()
 
-        self.assertEqual(sample(0.5, 0.05), "#ff0000")
-        self.assertEqual(sample(0.05, 0.5), "#111318")
+        def assert_sample(x, y, expected):
+            # Qt schedules the scene-graph repaint after the input event; slower
+            # CI renderers can still return the previous frame on the first grab.
+            deadline = time.monotonic() + 3
+            while sample(x, y) != expected and time.monotonic() < deadline:
+                QTest.qWait(20)
+            self.assertEqual(sample(x, y), expected)
+
+        assert_sample(0.5, 0.05, "#ff0000")
+        assert_sample(0.05, 0.5, "#111318")
         self.click("wallpaperPreviewFill")
-        self.assertEqual(sample(0.05, 0.5), "#00ff00")
+        assert_sample(0.05, 0.5, "#00ff00")
         self.assertGreater(image.property("paintedHeight"), frame.height())
         self.click("wallpaperPreviewFit")
-        self.assertEqual(sample(0.05, 0.5), "#111318")
+        assert_sample(0.05, 0.5, "#111318")
         self.assertEqual(self.controller.state["profile"], profile)
         self.assertFalse(self.paths.config.exists())
         self.assertFalse(self.paths.state.exists())
