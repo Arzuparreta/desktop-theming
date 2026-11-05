@@ -1,33 +1,44 @@
-# TODO
+# Roadmap
 
-## Environment-agnostic (planned)
+Product direction: [docs/DIRECTION.md](docs/DIRECTION.md). The ThinkPad dotfiles
+are one historical example, not the architecture or a required desktop stack.
 
-Goal: clone + `./install.sh` works on any of my machines. Today the setup
-assumes this ThinkPad. Hard-coded / environment-specific points:
+## Delivered foundation
 
-- [ ] **Wallpaper library path** — `WALLPAPER_ROOT` defaults to
-      `/mnt/desktop-ruben/wallpapers/` (CIFS share over Tailscale). Move to a
-      config file (`~/.config/walltheme/config`) with per-host overrides.
-- [ ] **X11-only** — wallpaper via `feh`, colors via `xrdb`, i3 reload. Add
-      backends for Wayland (swww/swaybg, sway/Hyprland reload).
-- [ ] **Terminal** — kitty only (`pkill -USR1 kitty`, kitty extras file).
-      Add alacritty/ghostty/foot outputs (configs already exist in ~/.config).
-- [ ] **pywal dependency** — used only to render templates. Could render
-      templates directly and drop pywal (also fixes its IMv7 `convert`
-      deprecation noise).
-- [ ] **Host-specific bits in i3/polybar** — monitor names, keyboard name in
-      `info-hackspeed.sh`, battery scripts, soundsible bindings, IPs. Split
-      into a shared base + per-host includes.
-- [ ] **Dependency install** — `install.sh` only reports missing tools; add
-      per-distro package lists (Arch/CachyOS first).
-- [ ] **Shell** — `theme.zsh` is zsh-only; add fish equivalent
-      (`~/.config/fish` exists).
+- [x] Read-only inventory with separate executable, process, config and session evidence.
+- [x] Local control center and matching CLI; no account or package installation.
+- [x] Empty initial management selection; explicit opt-in for each integration.
+- [x] Reuse the accessible palette engine without legacy application hooks or pywal.
+- [x] Kitty and Ghostty generated themes and marked includes preserving other preferences.
+- [x] Palette preview, exact file review and explicit application approval.
+- [x] Conflict checks, previous file contents, rollback, undo and interrupted recovery.
+- [x] Reviewed disconnection of an integration, independently reversible.
+- [x] HOME/XDG isolation in functional tests and desktop/mobile browser acceptance.
+- [x] Safe launcher-only installation; ThinkPad workflow requires an explicit legacy choice.
 
-## Theming ideas
+## Next complete workflows
 
-- [ ] Theme rofi (drun + the Mod+w menu) and dunst from the scheme with the
-      same contrast checks (rofi currently uses solarized).
-- [ ] p10k segments use fixed 256-color backgrounds (238): readable on any
-      theme, but not adapted. Could map them to ANSI slots.
-- [ ] Auto light/dark by time of day or ambient light sensor.
-- [ ] Wallpaper thumbnails in the rofi picker.
+- [ ] Named profiles: create, compare, switch and export component selections and theme settings.
+- [ ] Alacritty and foot integration, including config-format/version differences.
+- [ ] Verify Ghostty configuration and appearance in a real Ghostty session.
+- [ ] Report applied file state versus running application state; explicit reload actions
+      with adapter-specific support, never automatic during discovery or install.
+- [ ] File chooser for wallpaper sources and per-profile wallpaper libraries.
+- [ ] Rofi/Wofi and Dunst/Mako palette adapters with interaction-state contrast checks.
+- [ ] Polybar/Waybar adapters that preserve modules, hardware choices and existing styles.
+- [ ] Wallpaper providers: X11 first, then Sway/Hyprland with explicit backend selection.
+- [ ] GTK 3 preference management with selectable installed light/dark themes.
+- [ ] Separate GTK 4/libadwaita, GNOME, KDE/Qt and Xfce capabilities and validation.
+- [ ] Improve discovery for custom config locations, Flatpak and runtime desktop settings.
+- [ ] Optional reviewed dependency installation with per-distribution package information.
+- [ ] Portable example profiles with no personal paths, services or hardware assumptions.
+
+## Later composition options
+
+- [ ] Fish and zsh style adapters; optional prompt segments using the common palette.
+- [ ] Per-component overrides, icon/cursor selection and contrast explanations.
+- [ ] Optional time-of-day or sensor-based appearance switching with explicit enrollment.
+- [ ] Wallpaper thumbnails and library browsing.
+
+Each adapter must declare discovery/configuration/reload capabilities and its
+actual validation evidence. Previewing and inspection must remain read-only.
