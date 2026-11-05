@@ -24,3 +24,8 @@ Read `docs/DIRECTION.md` before choosing product scope or architecture.
 
 - Commit and push completed repository changes to GitHub before ending a turn.
   Report failed checks or pushes explicitly; never force-push.
+
+- When asked to cut a release, follow `docs/APPIMAGE.md#github-releases`: dispatch
+  `appimage.yml` from the latest pushed `main`, wait for publication, verify the
+  public assets/checksum and bundled isolated smoke test, and report the release
+  URL. Bump the source version for subsequent releases; never replace a tag.
