@@ -27,7 +27,7 @@ class InstallTests(unittest.TestCase):
     def test_normal_apply_refuses_without_creating_any_files(self):
         result = self.install("--apply")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("engine only", result.stderr)
+        self.assertIn("Automatic installation is not provided", result.stderr)
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_normal_apply_preserves_existing_launcher(self):

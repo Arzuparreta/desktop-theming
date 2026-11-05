@@ -4,10 +4,27 @@ A modular Linux desktop theming engine. It discovers an existing desktop,
 inspects terminal color sources and prepares reversible theme changes while
 preserving unrelated preferences.
 
-**Current state:** Python engine only. There is no GUI, HTTP server, application
-launcher, configuration CLI or MCP interface. The next delivery is a new GUI;
-its toolkit and design are undecided. MCP and a small fallback CLI for agents
-are planned later.
+**Current state:** a local PySide6 / Qt Quick application over the Python engine.
+Choose a palette, inspect components and color sources, review exact changes,
+apply, disconnect, export, undo and recover without configuration commands.
+Only Kitty and Ghostty have managed theme integrations; other components are
+discovery-only. MCP and a small fallback CLI for agents are planned later.
+
+## Launch
+
+Open the built `dist/DesktopTheming-x86_64.AppImage`, or prepare a source checkout:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-gui.txt
+.venv/bin/python -m desktop_theming
+```
+
+Opening the application and previewing colors do not change desktop settings.
+The image supplies palette colors; it does not replace the wallpaper. The GUI
+runs without a server or background service. [GUI workflows](docs/GUI.md) and
+[AppImage builds, artifacts and compatibility](docs/APPIMAGE.md) describe usage
+and distribution. The AppImage workflow builds an artifact on GitHub Actions.
 
 The product direction is in [docs/DIRECTION.md](docs/DIRECTION.md).
 
@@ -28,15 +45,15 @@ The engine never installs packages, invokes legacy apply hooks, replaces the
 wallpaper or signals applications. No pywal, particular desktop environment,
 account or external service is required for the new engine.
 
-There is currently no application to launch or install. Normal `./install.sh`
-explains this without changes; `./install.sh --apply` refuses installation.
+Normal `./install.sh` explains the launch options without changes;
+`./install.sh --apply` refuses automatic installation. Dependencies are installed
+explicitly in a virtual environment for source development.
 
 ## Building on the engine
 
 [Development](docs/DEVELOPMENT.md) describes the modules and service boundary.
 [Existing configuration](docs/CONFIGURATION.md) describes inspection, replacement
-choices, links, ownership, disconnection and conflicts. The future GUI must expose
-these workflows without requiring configuration commands in a terminal.
+choices, links, ownership, disconnection and conflicts. The GUI exposes these workflows without requiring configuration commands in a terminal.
 
 ## Compatibility today
 

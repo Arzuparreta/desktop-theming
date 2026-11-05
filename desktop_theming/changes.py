@@ -191,10 +191,41 @@ def apply(paths, plan):
         return {"id": ident, "status": "applied"}
 
 
-def undo(paths, ident, *, recover=False):
+def review_undo(paths, ident, *, recover=False):
+    """Read-only, exact reverse plan, bound to the current journal and file states."""
+    if len(ident) != 32 or any(c not in "0123456789abcdef" for c in ident):
+        raise ValueError("Invalid transaction ID.")
+    eligible = [item for item in history(paths) if item["status"] in
+                ("applied", "prepared", "recovery-needed", "undoing")]
+    if not eligible or eligible[0]["id"] != ident:
+        raise ValueError("Undo/recover the latest active transaction first.")
+    journal = json.loads((paths.history / f"{ident}.json").read_text())
+    interrupted = journal["status"] != "applied"
+    if interrupted != recover:
+        raise ValueError("Use recovery for interrupted changes, undo for applied changes.")
+    proposed = []
+    for item in reversed(journal["changes"]):
+        target = Path(item["path"])
+        safe_parents(target, paths.config)
+        current = snapshot(target)
+        allowed = [item["before"], item["after"]] if interrupted else [item["after"]]
+        if current not in allowed:
+            raise ValueError(f"Cannot undo: {target} was edited after application. "
+                             "Your edits have been preserved.")
+        reverse = replacement(target, item["before"], paths.config, before=current)
+        if reverse:
+            proposed.append(reverse)
+    payload = {"transaction": ident, "recover": recover,
+               "journal": digest(journal), "changes": proposed}
+    return dict(payload, id=digest(payload))
+
+
+def undo(paths, ident, *, recover=False, reviewed=None):
     if len(ident) != 32 or any(c not in "0123456789abcdef" for c in ident):
         raise ValueError("Invalid transaction ID.")
     with locked(paths):
+        if reviewed is not None and reviewed != review_undo(paths, ident, recover=recover):
+            raise ValueError("The reviewed restoration is stale. Review it again; no files were changed.")
         items = history(paths)
         eligible = [item for item in items if item["status"] in
                     ("applied", "prepared", "recovery-needed", "undoing")]

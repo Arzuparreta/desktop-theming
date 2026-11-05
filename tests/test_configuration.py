@@ -8,6 +8,7 @@ from pathlib import Path
 from desktop_theming import changes, configuration, inventory, service, theme
 from desktop_theming.paths import Paths
 
+
 class ConfigurationTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="desktop-existing-")
