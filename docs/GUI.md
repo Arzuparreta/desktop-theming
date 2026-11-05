@@ -41,6 +41,15 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
   compact. Choose the folder again to refresh its contents. The session adapter
   is chosen automatically at review, and only approval changes the wallpaper. Preview failures are
   visible; fallback palettes include the engine's explanation.
+  The selected wallpaper uses a centered 16:9 preview canvas whose size follows
+  the column width and available window height. **Fit** (the default) preserves
+  the whole image with neutral margins for other aspect ratios; **Fill** shows
+  a centered crop without stretching. These controls affect only the preview,
+  not the desktop adapter's wallpaper placement. The preview also remains
+  available above the folder list; scroll the appearance column on short windows.
+  Images honor orientation metadata and decode asynchronously within a bounded
+  2560×1440 size, independently of window resizing. Missing/unreadable images
+  show an explicit preview message.
 - **Components:** select **Use palette** beside Kitty or Ghostty. The application
   checks the current configuration first. A linked config or existing colors
   opens an explanation immediately, with separate, initially unchecked choices
@@ -98,6 +107,9 @@ connection, disconnection, undo, interrupted recovery, stale review rejection,
 image folders with special characters, mixed-case extensions, keyboard selection,
 retained list scrolling, immediately visible color/link decisions, cancellation
 without consent, linked folder blocking, refresh without lost choices and safe standalone exports.
+Wallpaper checks cover 16:9, portrait, square and panoramic images across compact,
+fullscreen, tall and wide/short windows, plus rendered pixels for fit margins and
+centered cropping. Switching preview modes must not change the profile or files.
 The bundled smoke test always replaces HOME/XDG/PATH with a temporary fixture before creating Qt. It
 loads the actual QML and exercises image/folder dialogs, the thumbnail list, image
 selection and guided connection from a linked configuration,
