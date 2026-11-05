@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import wallpaper
+from . import appearance, wallpaper
 
 
 def digest(value):
@@ -142,10 +142,25 @@ def history(paths):
 def check_changes(changes, expected, paths):
     for item in changes:
         path = Path(item["path"])
-        safe_parents(path, paths.config)
+        safe_parents(path, config_root(paths, path))
         if snapshot(path) != item[expected]:
             raise ValueError(f"Configuration changed since review: {path}. "
                              "Review a fresh plan; no files were changed.")
+
+
+def config_root(paths, path):
+    # The only managed file outside XDG_CONFIG_HOME is zsh's conventional rc.
+    return paths.home if path == paths.home / ".zshrc" else paths.config
+
+
+def check_restoration_target(path, state):
+    if state["kind"] != "symlink":
+        return
+    target = Path(state["target"])
+    target = target if target.is_absolute() else path.parent / target
+    actual = snapshot(target)
+    if text_of(actual) != text_of(state) or actual.get("mode") != state["mode"]:
+        raise ValueError(f"Original dotfiles target changed: {target}; refusing to restore its link.")
 
 
 def check_inputs(inputs):
@@ -185,23 +200,29 @@ def apply(paths, plan):
         check_inputs(plan.get("inputs", []))
         check_changes(plan["changes"], "before", paths)
         action = copy.deepcopy(plan.get("wallpaper_action"))
+        settings = copy.deepcopy(plan.get("settings_actions", []))
+        for setting in settings:
+            appearance.check(setting, "before")
         if action:
             wallpaper.check(action, "before")
-        if not plan["changes"] and not action:
+        if not plan["changes"] and not action and not settings:
             return {"id": None, "status": "unchanged"}
         ident = uuid.uuid4().hex
         journal = {"id": ident, "created": datetime.now(timezone.utc).isoformat(),
                    "status": "prepared", "components": plan["profile"]["components"],
-                   "changes": plan["changes"], "wallpaper_action": action}
+                   "changes": plan["changes"], "wallpaper_action": action, "settings_actions": settings}
         journal_path = paths.history / f"{ident}.json"
         write_journal(journal_path, journal)
-        written = []
+        written, attempted_settings = [], []
         try:
             for item in plan["changes"]:
                 # Recheck immediately before each replacement as well as preflight.
                 check_changes([item], "before", paths)
                 atomic_restore(Path(item["path"]), item["after"])
                 written.append(item)
+            for setting in settings:
+                attempted_settings.append(setting)
+                appearance.apply(setting)
             if action:
                 wallpaper.apply(action)
                 write_journal(journal_path, journal)
@@ -214,9 +235,15 @@ def apply(paths, plan):
                     restore_wallpaper(paths, action)
                 except (OSError, ValueError):
                     journal["status"] = "recovery-needed"
+            for setting in reversed(attempted_settings):
+                try:
+                    appearance.restore(setting)
+                except (OSError, ValueError):
+                    journal["status"] = "recovery-needed"
             for item in reversed(written):
                 try:
                     check_changes([item], "after", paths)
+                    check_restoration_target(Path(item["path"]), item["before"])
                     atomic_restore(Path(item["path"]), item["before"])
                 except (OSError, ValueError):
                     journal["status"] = "recovery-needed"
@@ -238,22 +265,27 @@ def review_undo(paths, ident, *, recover=False):
     if interrupted != recover:
         raise ValueError("Use recovery for interrupted changes, undo for applied changes.")
     action = journal.get("wallpaper_action")
+    settings = journal.get("settings_actions", [])
+    for setting in settings:
+        appearance.check(setting, "after", partial=interrupted)
     if action:
         wallpaper.check(action, "after", partial=interrupted)
     proposed = []
     for item in reversed(journal["changes"]):
         target = Path(item["path"])
-        safe_parents(target, paths.config)
+        safe_parents(target, config_root(paths, target))
         current = snapshot(target)
         allowed = [item["before"], item["after"]] if interrupted else [item["after"]]
         if current not in allowed:
             raise ValueError(f"Cannot undo: {target} was edited after application. "
                              "Your edits have been preserved.")
-        reverse = replacement(target, item["before"], paths.config, before=current)
+        check_restoration_target(target, item["before"])
+        reverse = replacement(target, item["before"], config_root(paths, target), before=current)
         if reverse:
             proposed.append(reverse)
     payload = {"transaction": ident, "recover": recover,
-               "journal": digest(journal), "changes": proposed, "wallpaper_action": action}
+               "journal": digest(journal), "changes": proposed, "wallpaper_action": action,
+               "settings_actions": settings}
     return dict(payload, id=digest(payload))
 
 
@@ -279,13 +311,17 @@ def undo(paths, ident, *, recover=False, reviewed=None):
         # replacement. An unrelated edit is never permission to overwrite it.
         for item in journal["changes"]:
             target = Path(item["path"])
-            safe_parents(target, paths.config)
+            safe_parents(target, config_root(paths, target))
             current = snapshot(target)
             allowed = [item["after"], item["before"]] if interrupted else [item["after"]]
             if current not in allowed:
                 raise ValueError(f"Cannot undo: {target} was edited after application. "
                                  "Your edits have been preserved.")
+            check_restoration_target(target, item["before"])
         action = journal.get("wallpaper_action")
+        settings = journal.get("settings_actions", [])
+        for setting in settings:
+            appearance.check(setting, "after", partial=interrupted)
         if action:
             wallpaper.check(action, "after", partial=interrupted)
         journal["status"] = "undoing"
@@ -293,13 +329,16 @@ def undo(paths, ident, *, recover=False, reviewed=None):
         if action:
             restore_wallpaper(paths, action)
             write_journal(path, journal)
+        for setting in reversed(settings):
+            appearance.restore(setting)
         for item in reversed(journal["changes"]):
             target = Path(item["path"])
             # Recheck before writing to avoid overwriting edits during undo.
-            safe_parents(target, paths.config)
+            safe_parents(target, config_root(paths, target))
             if snapshot(target) == item["before"]:
                 continue
             check_changes([item], "after", paths)
+            check_restoration_target(target, item["before"])
             atomic_restore(target, item["before"])
         journal["status"] = "undone"
         write_journal(path, journal)

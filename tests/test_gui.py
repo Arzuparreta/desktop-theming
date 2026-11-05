@@ -16,7 +16,7 @@ HAS_QT = importlib.util.find_spec("PySide6") is not None
 if HAS_QT:
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     os.environ["QT_QUICK_BACKEND"] = "software"
-    from PySide6.QtCore import QObject, QPoint, Qt, QUrl, qInstallMessageHandler
+    from PySide6.QtCore import QObject, QPoint, QSettings, Qt, QUrl, qInstallMessageHandler
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
     from PySide6.QtQuickControls2 import QQuickStyle
@@ -222,6 +222,83 @@ class GuiTests(unittest.TestCase):
         self.click("approveChanges")
         self.assertIn("BEGIN desktop-theming", config.read_text())
         self.assertEqual(self.messages, [])
+
+    def test_new_file_adapters_and_unknown_gtk_availability_work_from_the_window(self):
+        self.window.setProperty("page", 1)
+        self.click("connect-foot")
+        self.assertIn("foot", self.controller.state["profile"]["components"])
+        self.click("connect-gtk3")
+        self.assertIn("gtk3", self.controller.state["profile"]["components"])
+        self.assertFalse(self.paths.profile.exists())
+        self.click("reviewChanges")
+        paths = [item["path"] for item in self.controller.state["review"]["changes"]]
+        self.assertIn(str(self.paths.config / "foot/foot.ini"), paths)
+        self.assertIn(str(self.paths.config / "gtk-3.0/gtk.css"), paths)
+        self.click("approveChanges")
+        self.assertFalse(self.controller.state["error"])
+        self.assertTrue((self.paths.config / "gtk-3.0/gtk.css").exists())
+        self.controller.renderExport("alacritty")
+        self.settle()
+        self.assertIn("[colors.primary]", self.controller.state["exportText"])
+        self.assertEqual(self.messages, [])
+
+    def test_native_preferences_have_reviewed_values_apply_and_undo_in_the_window(self):
+        values = {"color-scheme": "default"}
+
+        def command(args):
+            if args[1] == "list-keys":
+                return "color-scheme"
+            if args[1] == "range":
+                return "enum\n'default'\n'prefer-dark'\n'prefer-light'"
+            if args[1] == "writable":
+                return "true"
+            if args[1] == "get":
+                return repr(values[args[3]])
+            if args[1] == "set":
+                values[args[3]] = json.loads(args[4])
+                return ""
+            raise AssertionError(args)
+
+        with patch.dict(os.environ, XDG_CURRENT_DESKTOP="GNOME"), patch(
+                "desktop_theming.appearance.command", side_effect=command):
+            self.controller.refresh()
+            self.settle()
+            self.window.setProperty("page", 1)
+            self.click("connect-gnome")
+            self.assertTrue(self.controller.state["connection"]["native"])
+            self.assertFalse(self.control("connectionExport").property("visible"))
+            self.click("allowReplaceColors")
+            self.click("confirmConnection")
+            self.click("reviewChanges")
+            settings = [c for c in self.controller.state["review"]["changes"] if c["path"] == "Desktop appearance"]
+            self.assertEqual(len(settings), 1)
+            self.assertIn("prefer-dark", settings[0]["diff"])
+            self.assertEqual(values["color-scheme"], "default")
+            self.click("approveChanges")
+            self.assertEqual(values["color-scheme"], "prefer-dark")
+            self.controller.reviewUndo(self.controller.state["overview"]["history"][0]["id"], False)
+            self.settle()
+            self.click("approveChanges")
+            self.assertEqual(values["color-scheme"], "default")
+            self.assertEqual(self.messages, [])
+
+    def test_qt_native_palette_and_path_parse_with_qsettings(self):
+        from desktop_theming import integrations, service
+
+        paths = Paths(self.root, self.root / 'config #1 "quoted"', self.root / "state")
+        profile = dict(service.DEFAULT_PROFILE, components=["qt"])
+        with patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
+            service.apply_reviewed(paths, service.make_plan(paths, profile))
+        configs = integrations.targets(paths, "qt")
+        for config in configs[:2]:
+            settings = QSettings(str(config), QSettings.IniFormat)
+            self.assertEqual(settings.value("Appearance/color_scheme_path"), str(configs[2]))
+            self.assertTrue(settings.value("Appearance/custom_palette", type=bool))
+        settings = QSettings(str(configs[2]), QSettings.IniFormat)
+        for group in ("active_colors", "inactive_colors", "disabled_colors"):
+            roles = settings.value("ColorScheme/" + group)
+            self.assertIsInstance(roles, list)
+            self.assertEqual(len(roles), 21)
 
     def test_changed_configuration_rejects_approval_without_overwrite(self):
         self.controller.selectComponent("kitty", True)

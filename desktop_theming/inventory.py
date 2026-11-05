@@ -5,7 +5,7 @@ import os
 import shutil
 from pathlib import Path
 
-from . import changes, configuration, ownership
+from . import changes, configuration, integrations, ownership
 
 # id, name, category, executables, process names, config paths
 COMPONENTS = (
@@ -28,11 +28,11 @@ COMPONENTS = (
     ("waybar", "Waybar", "Bar", ("waybar",), ("waybar",),
      ("waybar/config", "waybar/config.jsonc", "waybar/style.css")),
     ("rofi", "Rofi", "Launcher", ("rofi",), ("rofi",), ("rofi/config.rasi",)),
-    ("wofi", "Wofi", "Launcher", ("wofi",), ("wofi",), ("wofi/config",)),
+    ("wofi", "Wofi", "Launcher", ("wofi",), ("wofi",), ("wofi/config", "wofi/style.css")),
     ("dunst", "Dunst", "Notifications", ("dunst",), ("dunst",), ("dunst/dunstrc",)),
     ("mako", "Mako", "Notifications", ("mako",), ("mako",), ("mako/config",)),
-    ("gtk3", "GTK 3", "Applications", (), (), ("gtk-3.0/settings.ini",)),
-    ("gtk4", "GTK 4 / libadwaita", "Applications", (), (), ("gtk-4.0/settings.ini",)),
+    ("gtk3", "GTK 3", "Applications", (), (), ("gtk-3.0/settings.ini", "gtk-3.0/gtk.css")),
+    ("gtk4", "GTK 4 / libadwaita", "Applications", (), (), ("gtk-4.0/settings.ini", "gtk-4.0/gtk.css")),
     ("qt", "Qt settings", "Applications", ("qt5ct", "qt6ct"), (),
      ("qt5ct/qt5ct.conf", "qt6ct/qt6ct.conf")),
     ("zsh", "zsh", "Shell", ("zsh",), ("zsh",), ()),
@@ -43,7 +43,7 @@ COMPONENTS = (
     ("hyprpaper", "hyprpaper", "Wallpaper", ("hyprctl",), ("hyprpaper",), ()),
     ("swaybg", "swaybg", "Wallpaper", ("swaybg",), ("swaybg",), ()),
 )
-SUPPORTED = {"kitty", "ghostty"}
+SUPPORTED = {"kitty", "ghostty", "gnome", "xfce"} | set(integrations.FILES)
 START = "# BEGIN desktop-theming"
 END = "# END desktop-theming"
 
@@ -81,6 +81,10 @@ def session(environ=None):
 
 
 def config_target(paths, component):
+    if component in integrations.FILES:
+        return integrations.targets(paths, component)[0]
+    if component in ("gnome", "xfce"):
+        return paths.ownership(component)
     if component == "kitty":
         return paths.config / "kitty/kitty.conf"
     if component == "ghostty":
@@ -94,7 +98,21 @@ def config_target(paths, component):
 
 
 def managed(paths, component):
+    from . import appearance
+
     try:
+        if component in integrations.FILES:
+            record = integrations.load(paths, component)
+            if record:
+                integrations.verify(record)
+                for name in record["files"]:
+                    changes.safe_parents(Path(name), integrations.root_for(paths, Path(name)))
+            return bool(record)
+        if component in appearance.COMPONENTS:
+            record = appearance.load(paths, component)
+            if record:
+                appearance.check(record["action"], "after")
+            return bool(record)
         record = ownership.load(paths, component)
         if not record:
             return False
@@ -118,6 +136,8 @@ def gtk_preferences(paths):
 
 
 def discover(paths, *, running=None, which=None, environ=None):
+    from . import appearance
+
     running = processes() if running is None else running
     which = shutil.which if which is None else which
     current = session(environ)
@@ -137,10 +157,17 @@ def discover(paths, *, running=None, which=None, environ=None):
                              "symlink": file.is_symlink(),
                              "target": str(file.readlink()) if file.is_symlink() else None} for file in files],
                 "supported": ident in SUPPORTED,
+                "wallpaper_provider": category == "Wallpaper",
+                "capability": integrations.CAPABILITIES.get(ident, "Wallpaper provider; use the reviewed session wallpaper control."),
                 "managed": managed(paths, ident) if ident in SUPPORTED else False}
         if ident in SUPPORTED:
             try:
-                item["configuration"] = configuration.inspect(paths, ident, config_target(paths, ident))
+                if ident in integrations.FILES:
+                    item["configuration"] = integrations.inspect(paths, ident)
+                elif ident in appearance.COMPONENTS:
+                    item["configuration"] = appearance.inspect(paths, ident)
+                else:
+                    item["configuration"] = configuration.inspect(paths, ident, config_target(paths, ident))
                 item["configuration"]["ownership_record"] = paths.ownership(ident).exists()
                 if item["configuration"]["ownership_record"] and not item["managed"]:
                     item["configuration"]["issues"].append(

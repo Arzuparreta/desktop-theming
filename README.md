@@ -6,17 +6,19 @@ Icon: Tux by Larry Ewing (lewing@isc.tamu.edu), created with The GIMP;
 cropped and combined with theme colors. See [artwork attribution](packaging/THIRD_PARTY.md#icon-artwork).
 
 A modular Linux desktop theming engine. It discovers an existing desktop,
-inspects terminal color sources and prepares reversible theme changes while
+inspects appearance settings and prepares reversible theme changes while
 preserving unrelated preferences.
 
 **Current state:** a local PySide6 / Qt Quick application over the Python engine.
 Choose a palette, inspect components and color sources, review exact changes,
 apply, disconnect, export, undo and recover without configuration commands.
-Selecting a terminal explains existing colors and linked configurations before
+Selecting an integration explains existing colors and linked configurations before
 review. Technical details are optional; consent never changes files by itself.
-Kitty and Ghostty have managed color integrations. Desktop wallpaper changes
-are automatically routed to a compatible session adapter; other themes remain
-discovery-only. MCP and a small fallback CLI for agents are planned later.
+Terminals, bars, launchers, notifications, shells, GTK/Qt and native desktop
+appearance have individually scoped managed integrations. Desktop wallpaper
+changes use compatible session adapters; swaybg has a Sway configuration workflow
+for the next manual reload. [Exact capabilities and limits](docs/INTEGRATIONS.md).
+MCP and a small fallback CLI for agents are planned later.
 
 ## Launch
 
@@ -47,8 +49,9 @@ The product direction is in [docs/DIRECTION.md](docs/DIRECTION.md).
   session evidence. Nothing is selected for management on first use.
 - Wallpaper-derived terminal palettes with dark/light modes and a safe fallback
   when adaptive colors cannot meet contrast and color-distinction checks.
-- Kitty and Ghostty color integration: inspect existing directives and includes,
-  require explicit replacement and link choices, and preserve other preferences.
+- Managed native configuration for all detected component families, with explicit
+  replacement/link choices, separate GTK/Qt and GNOME/Xfce preferences, and
+  preserved unrelated preferences. [Integration matrix](docs/INTEGRATIONS.md).
 - Exact file-change plans, stale-input checks, private ownership records,
   transactional application, disconnection, undo and interrupted recovery.
 - Standalone theme rendering for user-managed dotfiles, without writing files.
@@ -74,11 +77,14 @@ choices, links, ownership, disconnection and conflicts. The GUI exposes these wo
 | Component | Discovery | Managed theme |
 |---|---|---|
 | kitty, Ghostty | Executables, processes, conventional configs and color sources | Palette, marked include, disconnect, undo |
-| Alacritty, foot | Executables, processes, conventional configs | Planned |
-| i3, Sway, Hyprland, GNOME, Plasma, Xfce | Available/running components and session evidence | Planned |
-| Polybar, Waybar, Rofi, Wofi, Dunst, Mako | Executables, processes, conventional configs | Planned |
-| GTK 3, GTK 4/libadwaita, Qt settings | Conventional config files; GTK 3 theme preferences | Planned |
-| zsh, fish, swaybg | Executables/processes and known config paths where applicable | Discovery only |
+| Alacritty, foot | Executables, processes, conventional configs and appearance sources | TOML/INI palettes, disconnect and undo |
+| i3, Sway, Hyprland | Available/running components and session evidence | Window borders/title roles; manual session reload |
+| GNOME, Xfce | Available/running components and session evidence | Reviewed native mode/accent or installed theme counterpart; active session required |
+| KDE Plasma | Executables, processes, kdeglobals | Application color roles; Shell theme stays as configured |
+| Polybar, Waybar, Rofi, Wofi, Dunst, Mako | Executables, processes, conventional configs | Scoped palette defaults and supported interaction/urgency states |
+| GTK 3, GTK 4/libadwaita, Qt settings | Conventional config files; GTK 3 theme preferences | Separate user CSS/qt5ct+qt6ct palettes; toolkit/application limits apply |
+| zsh, fish | Executables/processes and conventional startup files | Interactive editor/syntax/pager colors; keep prompts |
+| swaybg | Executable/process evidence | Sway image configuration for the next manual reload; keep output layout |
 | Desktop wallpaper | Session-aware, read-only probes | GNOME and derivatives, Plasma Image, Xfce, swww/awww, compatible hyprpaper IPC, X11 feh; see [limits and recovery](docs/WALLPAPER.md) |
 
 Discovery is best-effort. PATH availability does not prove package installation;
@@ -97,7 +103,7 @@ Respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`, with these normal defaults:
 
 ```text
 ~/.config/desktop-theming/profile.json        selected components and theme settings
-~/.config/desktop-theming/themes/*.conf      generated terminal themes
+~/.config/desktop-theming/themes/*.conf      generated terminal/Qt palettes
 ~/.config/desktop-theming/ownership/*.json   original configuration and owned integration
 ~/.local/state/desktop-theming/history/      undo/recovery journals
 ```

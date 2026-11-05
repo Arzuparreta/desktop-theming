@@ -51,11 +51,12 @@ ApplicationWindow {
     }
     function inspect(c) { inspected = c; inspector.open() }
     function componentStatus(c) {
+        if (c.wallpaper_provider && !c.supported) return "Managed by the reviewed wallpaper control when its session adapter is compatible."
         if (!c.supported) return "Theme changes are not supported yet."
         if (selected(c.id) && !c.managed) return "Will use this palette after review and apply."
         if (!selected(c.id) && c.managed) return "Will restore its previous colors after review and apply."
-        if (c.managed) return "Files are configured. Running colors may need a terminal reload."
-        return c.installed ? "Keep your other preferences; change only the colors." : "Not found on this computer. Nothing will be installed."
+        if (c.managed) return "Appearance is configured. " + (c.capability || "")
+        return c.installed !== false ? c.capability : "Not found on this computer. Nothing will be installed."
     }
     function sessionName() {
         const active = s.overview.components.find(c => c.current_session)
@@ -445,13 +446,13 @@ ApplicationWindow {
                                 Choice {
                                     visible: modelData.supported
                                     objectName: "connect-" + modelData.id
-                                    text: "Use palette"
+                                    text: modelData.id === "swaybg" ? "Use image" : ["gnome", "xfce"].indexOf(modelData.id) >= 0 ? "Use appearance" : "Use palette"
                                     checked: selected(modelData.id)
-                                    enabled: !s.busy && s.loaded && (modelData.installed || checked)
+                                    enabled: !s.busy && s.loaded && (modelData.installed !== false || checked)
                                     onClicked: { controller.selectComponent(modelData.id, !selected(modelData.id)); checked = Qt.binding(function() { return selected(modelData.id) }) }
-                                    Accessible.name: "Use this palette in " + modelData.name
+                                    Accessible.name: text + " in " + modelData.name
                                 }
-                                Body { visible: !modelData.supported; text: modelData.category === "Wallpaper" && modelData.id !== "swaybg" ? "Automatic wallpaper" : "Detection only"; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                                Body { visible: !modelData.supported; text: modelData.category === "Wallpaper" ? "Automatic wallpaper" : "Detection only"; font.pixelSize: 12; Layout.preferredWidth: 100 }
                             }
                             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#2c2e35" }
                         }
@@ -534,7 +535,10 @@ ApplicationWindow {
                     width: parent.width
                     spacing: 14
                     Body { Layout.fillWidth: true; text: evidence(inspected) }
-                    Body { Layout.fillWidth: true; text: inspected.category === "Wallpaper" ? "Wallpaper changes are selected beside the image. The compatible method is detected during review; an installed tool alone does not establish support." : inspected.supported ? "To use this palette, select Use palette in the applications list. These details are read-only." : "Detected only. Theme changes for this component are not supported yet." }
+                    Body { Layout.fillWidth: true; text: inspected.id === "swaybg" ? "Select Use image to configure Sway's background for your next manual reload. No running process is replaced."
+                        : inspected.category === "Wallpaper" ? "Wallpaper changes are selected beside the image. The compatible method is detected during review; an installed tool alone does not establish support."
+                        : inspected.supported ? "Select the appearance control in the components list. These details are read-only." : "Detected only. Theme changes for this component are not supported yet." }
+                    Body { Layout.fillWidth: true; text: inspected.capability || "" }
                     Repeater {
                         model: inspected.configs || []
                         Body { required property var modelData; Layout.fillWidth: true; text: modelData.path + (modelData.symlink ? " → " + modelData.target : "") + (modelData.exists ? "" : " (missing)"); font.family: "monospace"; font.pixelSize: 12 }
@@ -623,10 +627,19 @@ ApplicationWindow {
             Body { Layout.fillWidth: true; visible: !!s.notice; text: s.notice; color: "#d0dfd1" }
             Body { Layout.fillWidth: true; visible: !!s.error; text: (s.problem.title || "") + "\n" + (s.problem.body || ""); color: "#f0b8b5" }
             RowLayout {
-                Repeater { model: ["kitty", "ghostty"]; Command { required property string modelData; text: modelData; primary: s.exportComponent === modelData; enabled: !s.busy; onClicked: controller.renderExport(modelData) } }
+                ComboBox {
+                    id: exportFormat
+                    objectName: "exportFormat"
+                    Layout.preferredWidth: 250
+                    model: s.overview.components.filter(c => c.supported && ["gnome", "xfce"].indexOf(c.id) < 0)
+                    textRole: "name"
+                    enabled: !s.busy
+                    onActivated: controller.renderExport(model[currentIndex].id)
+                }
+                Command { text: "Preview format"; enabled: !s.busy && exportFormat.currentIndex >= 0; onClicked: controller.renderExport(exportFormat.model[exportFormat.currentIndex].id) }
                 Item { Layout.fillWidth: true }
             }
-            Code { Layout.fillWidth: true; Layout.fillHeight: true; text: s.exportText || "Choose a terminal format." }
+            Code { Layout.fillWidth: true; Layout.fillHeight: true; text: s.exportText || "Choose a format to preview, copy or save." }
             RowLayout {
                 Item { Layout.fillWidth: true }
                 Command { text: "Close"; enabled: !s.busy; onClicked: exportDialog.close() }

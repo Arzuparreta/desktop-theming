@@ -12,8 +12,6 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from . import inventory
-
 
 def host_environment():
     """Keep bundle libraries private to this process, not host wallpaper tools."""
@@ -296,6 +294,8 @@ def _probe(paths, image, backend, tool, **extra):
 
 def detect(paths, image, *, which=None):
     """Choose only session-compatible adapters; failed probes never run setters."""
+    from . import inventory
+
     which = which or shutil.which
     current = inventory.session()
     desktop = (current['desktop'] if current['desktop'] != 'Unknown' else current['name']).lower()
