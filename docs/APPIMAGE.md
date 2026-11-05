@@ -52,3 +52,29 @@ references. Revalidate the QML hook and bundled dialogs when changing Qt version
 Upstream references: [AppImage concepts](https://docs.appimage.org/introduction/concepts.html),
 [compatibility practices](https://docs.appimage.org/reference/best-practices.html),
 and [Qt deployment with PyInstaller](https://doc.qt.io/qtforpython-6/deployment/deployment-pyinstaller.html).
+
+## GitHub Releases
+
+The **AppImage** workflow still builds and smoke-tests artifacts on pushes and
+pull requests. A manual dispatch on `main` additionally publishes a GitHub Release
+with the tested AppImage and its SHA-256 file. No rebuild occurs during publication.
+Only the publication job has repository write permission. Failed validation,
+builds or smoke tests prevent publication.
+
+To cut a release:
+
+1. Update `desktop_theming.__version__` if necessary, run the required checks,
+   and commit and push all completed changes to `main`.
+2. Fetch GitHub's current `main` and launch:
+   `gh workflow run appimage.yml --ref main -f version=0.1.0`
+   (replace the version with the source version).
+3. Wait for the workflow to finish. Verify the public release tag resolves to
+   the built source commit, download both assets, check the SHA-256 and run
+   `APPIMAGE_EXTRACT_AND_RUN=1 ./DesktopTheming-x86_64.AppImage --smoke-test`.
+4. Report the public release URL and verification results.
+
+The workflow rejects dispatches from other branches, version mismatches and
+existing tags. It checks `main` before building and again before publishing;
+if `main` advanced, dispatch again to build the new head. Published releases are
+never overwritten; subsequent releases need a new source version. Publication
+uses the exact tested commit, with no dependency on the caller's local checkout.

@@ -3,6 +3,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (must match desktop_theming.__version__, e.g. 0.1.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: appimage-${{ github.event_name == 'workflow_dispatch' && 'release' || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -10,8 +19,24 @@ permissions:
 jobs:
   appimage:
     runs-on: ubuntu-22.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate release source and version
+        id: source
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          IS_RELEASE: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [[ "$IS_RELEASE" == true ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main ]] || { echo 'Release must run on main'; exit 1; }
+            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable X.Y.Z version'; exit 1; }
+            [[ "$RELEASE_VERSION" == "$(python3 -c 'from desktop_theming import __version__; print(__version__)')" ]] || { echo 'Version does not match source'; exit 1; }
+            [[ "$(git ls-remote origin refs/heads/main | cut -f1)" == "$(git rev-parse HEAD)" ]] || { echo 'main advanced; dispatch again'; exit 1; }
+            [[ -z "$(git ls-remote origin "refs/tags/v$RELEASE_VERSION")" ]] || { echo 'Tag already exists; bump the source version'; exit 1; }
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -48,3 +73,43 @@ jobs:
           path: |
             dist/DesktopTheming-x86_64.AppImage
             dist/DesktopTheming-x86_64.AppImage.sha256
+
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: appimage
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.appimage.outputs.source_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: DesktopTheming-x86_64
+          path: dist
+      - name: Verify and publish the tested AppImage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ needs.appimage.outputs.source_sha }}
+        run: |
+          cd dist
+          sha256sum --check DesktopTheming-x86_64.AppImage.sha256
+          [[ "$(git ls-remote origin refs/heads/main | cut -f1)" == "$SOURCE_SHA" ]] || { echo 'main advanced during build; dispatch again'; exit 1; }
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          Desktop Theming $RELEASE_VERSION, built and smoke-tested from main at $SOURCE_SHA.
+
+          Download DesktopTheming-x86_64.AppImage and make it executable to launch.
+          Target: x86_64 Linux, glibc 2.35+ (Ubuntu 22.04 build base).
+          FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
+          The accompanying .sha256 file verifies the download.
+
+          Kitty and Ghostty themes and supported desktop wallpaper adapters can apply
+          reviewed changes. Other theme integrations are discovery-only.
+          See docs/APPIMAGE.md and docs/WALLPAPER.md for compatibility limits.
+          EOF
+          gh release create "v$RELEASE_VERSION" \
+            --target "$SOURCE_SHA" --title "Desktop Theming $RELEASE_VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes --latest \
+            DesktopTheming-x86_64.AppImage DesktopTheming-x86_64.AppImage.sha256

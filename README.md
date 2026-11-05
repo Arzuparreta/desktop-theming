@@ -30,7 +30,9 @@ Choose **Folder…** to browse its images in a persistent list with small thumbn
 Review and approve to change the wallpaper. The GUI runs without a server or
 background service. [GUI workflows](docs/GUI.md) and
 [AppImage builds, artifacts and compatibility](docs/APPIMAGE.md) describe usage
-and distribution. The AppImage workflow builds an artifact on GitHub Actions.
+and distribution. The AppImage workflow builds tested artifacts on GitHub Actions and publishes
+versioned [GitHub Releases](https://github.com/Arzuparreta/desktop-theming/releases)
+on manual dispatch from `main`; see the [release procedure](docs/APPIMAGE.md#github-releases).
 
 The product direction is in [docs/DIRECTION.md](docs/DIRECTION.md).
 
