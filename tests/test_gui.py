@@ -63,6 +63,67 @@ class GuiTests(unittest.TestCase):
         self.settle()
         self.assertTrue(self.controller.state["loaded"])
 
+    def test_navigation_survives_new_controller_without_applying(self):
+        from PIL import Image
+
+        folder = self.root / "images"
+        folder.mkdir()
+        image = folder / "remember.png"
+        Image.new("RGB", (12, 12), "blue").save(image)
+        self.controller.chooseFolder(QUrl.fromLocalFile(str(folder)).toString())
+        self.settle()
+        self.controller.chooseWallpaper(QUrl.fromLocalFile(str(image)).toString())
+        self.settle()
+        other = Controller(self.paths)
+        try:
+            other.refresh()
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                self.app.processEvents()
+                if other.state["loaded"] and not other.state["busy"] and not other.timer.isActive():
+                    break
+                time.sleep(0.01)
+            self.assertEqual(other.state["profile"]["wallpaper"], str(image))
+            self.assertEqual(other.imageFolder["path"], str(folder))
+            self.assertFalse(self.paths.profile.exists())
+            self.assertFalse(self.paths.state.exists())
+        finally:
+            other.timer.stop()
+            other.pool.waitForDone()
+
+    def test_navigation_rejects_symlink(self):
+        from desktop_theming import navigation
+
+        target = self.root / "untouched.ini"
+        target.write_text("original")
+        directory = self.paths.config / "desktop-theming"
+        directory.mkdir(parents=True)
+        (directory / "navigation.ini").symlink_to(target)
+        with self.assertRaises(ValueError):
+            navigation.save(self.paths, "folder", "/tmp")
+        self.assertEqual(target.read_text(), "original")
+
+    def test_missing_navigation_paths_are_ignored(self):
+        from desktop_theming import navigation
+
+        navigation.save(self.paths, "folder", str(self.root / "missing"))
+        navigation.save(self.paths, "wallpaper", str(self.root / "missing.png"))
+        other = Controller(self.paths)
+        try:
+            other.refresh()
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                self.app.processEvents()
+                if other.state["loaded"] and not other.state["busy"] and not other.timer.isActive():
+                    break
+                time.sleep(0.01)
+            self.assertEqual(other.state["profile"]["wallpaper"], "")
+            self.assertEqual(other.imageFolder["path"], "")
+            self.assertFalse(other.state["error"])
+        finally:
+            other.timer.stop()
+            other.pool.waitForDone()
+
     def dispose(self):
         self.controller.timer.stop()
         self.controller.pool.waitForDone()
@@ -130,7 +191,9 @@ class GuiTests(unittest.TestCase):
 
     def test_initial_discovery_preview_and_qml_are_read_only(self):
         self.assertTrue(self.control("setDesktopWallpaper").property("checked"))
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.controller.state["profile"]["components"], [])
         self.assertTrue(self.controller.state["palette"]["special"])
@@ -284,7 +347,9 @@ class GuiTests(unittest.TestCase):
         self.controller.saveExport(QUrl.fromLocalFile(str(destination)).toString())
         self.settle()
         self.assertTrue(destination.exists())
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         link = self.root / "link.conf"
         link.symlink_to(destination)
@@ -348,7 +413,9 @@ class GuiTests(unittest.TestCase):
         self.choose_folder(folder, 3)
         self.assertTrue(self.control("setDesktopWallpaper").property("checked"))
         self.assertFalse(self.controller.state["profile"]["wallpaper"])
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         self.click("wallpaper-row-0")
         self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "a #1.png"))
@@ -366,7 +433,9 @@ class GuiTests(unittest.TestCase):
             row = self.control("wallpaper-row-0")
             self.assertGreater(row.width(), 250)
             self.assertLess(row.mapToScene(row.boundingRect().bottomRight()).x(), width)
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.messages, [])
 
@@ -409,7 +478,9 @@ class GuiTests(unittest.TestCase):
         self.settle()
         self.assertEqual(listing.property("contentY"), position)
         self.assertEqual(listing.property("count"), 24)
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.messages, [])
 
@@ -422,7 +493,9 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.controller.state["error"])
         self.assertEqual(self.controller.state["problem"]["action"], "folder")
         self.assertEqual(self.controller.imageFolder["path"], str(folder))
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
 
     def test_wallpaper_url_and_preview_handle_spaces_and_hashes(self):
@@ -435,7 +508,9 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.controller.state["error"])
         self.assertEqual(self.controller.state["profile"]["wallpaper"], str(image))
         self.assertIn("%23", self.controller.state["wallpaperUrl"])
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertEqual(self.messages, [])
 
     def wait_for_image(self):
@@ -474,7 +549,9 @@ class GuiTests(unittest.TestCase):
                                            image.property("paintedHeight"), shape[0] / shape[1], places=2)
                     if shape == (1920, 1080):
                         self.assertAlmostEqual(image.property("paintedHeight"), frame.height(), delta=1)
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.messages, [])
 
@@ -520,7 +597,9 @@ class GuiTests(unittest.TestCase):
         self.click("wallpaperPreviewFit")
         assert_sample(0.05, 0.5, "#111318")
         self.assertEqual(self.controller.state["profile"], profile)
-        self.assertFalse(self.paths.config.exists())
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.messages, [])
 

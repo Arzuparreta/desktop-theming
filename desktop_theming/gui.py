@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 
-from . import changes, presentation, service, theme, wallpaper
+from . import changes, navigation, presentation, service, theme, wallpaper
 from .paths import Paths
 
 
@@ -37,6 +37,7 @@ class Controller(QObject):
         self.paths = paths or Paths.current()
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
+        self._navigation = navigation.load(self.paths)
         self._folder = {"path": "", "images": []}
         self._state = {"busy": False, "loaded": False, "error": "", "notice": "",
                        "overview": {"components": [], "history": [], "session": {}},
@@ -58,6 +59,13 @@ class Controller(QObject):
         # A separate notification keeps the list and scroll position stable while
         # selecting images, generating palettes or refreshing desktop discovery.
         return self._folder
+
+    @Property(str, notify=folderChanged)
+    def navigationFolderUrl(self):
+        folder = self._navigation.get("folder", "")
+        if not folder:
+            folder = str(Path(self._state["profile"]["wallpaper"]).parent) if self._state["profile"]["wallpaper"] else ""
+        return QUrl.fromLocalFile(folder).toString() if folder and Path(folder).is_dir() else ""
 
     def publish(self, **values):
         if "profile" in values:
@@ -103,13 +111,21 @@ class Controller(QObject):
 
         def complete(result):
             self._review = None
+            first_load = not self._state["loaded"]
             profile = draft or copy.deepcopy(result["profile"])
+            remembered = self._navigation.get("wallpaper", "")
+            if first_load and remembered and Path(remembered).is_file():
+                profile["wallpaper"] = remembered
             if not self._state["loaded"] and not self.paths.profile.exists():
                 profile["set_wallpaper"] = True
             self.publish(overview=result, profile=profile,
                          review={}, connection={}, loaded=True, exportText="", palette={},
                          notice="Desktop checked. Pending choices kept." if draft else "")
-            self.timer.start()
+            folder = self._navigation.get("folder", "")
+            if first_load and folder and Path(folder).is_dir():
+                self.chooseFolder(QUrl.fromLocalFile(folder).toString(), remember=False)
+            else:
+                self.timer.start()
         self.start(lambda: service.overview(self.paths), complete)
 
     def edit(self, profile):
@@ -134,14 +150,24 @@ class Controller(QObject):
         profile["set_wallpaper"] = enabled
         self.edit(profile)
 
+    def remember(self, key, value):
+        try:
+            navigation.save(self.paths, key, value)
+            self._navigation[key] = value
+        except (OSError, ValueError) as exc:
+            self.publish(notice=f"Navigation could not be remembered: {exc}")
+
     @Slot(str)
     def chooseWallpaper(self, url):
+        if self._state["busy"] or not self._state["loaded"]:
+            return
         profile = copy.deepcopy(self._state["profile"])
         profile["wallpaper"] = QUrl(url).toLocalFile()
         self.edit(profile)
+        self.remember("wallpaper", profile["wallpaper"])
 
     @Slot(str)
-    def chooseFolder(self, url):
+    def chooseFolder(self, url, remember=True):
         def operation():
             local = QUrl(url).toLocalFile()
             if not local:
@@ -157,6 +183,8 @@ class Controller(QObject):
         def complete(result):
             self._folder = result
             self.folderChanged.emit()
+            if remember:
+                self.remember("folder", result["path"])
             if not self._state["palette"]:
                 self.timer.start()
 
