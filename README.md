@@ -9,7 +9,8 @@ Choose a palette, inspect components and color sources, review exact changes,
 apply, disconnect, export, undo and recover without configuration commands.
 Selecting a terminal explains existing colors and linked configurations before
 review. Technical details are optional; consent never changes files by itself.
-Only Kitty and Ghostty have managed theme integrations; other components are
+Kitty and Ghostty have managed color integrations. Desktop wallpaper changes
+are automatically routed to a compatible session adapter; other themes remain
 discovery-only. MCP and a small fallback CLI for agents are planned later.
 
 ## Launch
@@ -23,7 +24,8 @@ python3 -m venv .venv
 ```
 
 Opening the application and previewing colors do not change desktop settings.
-The image supplies palette colors; it does not replace the wallpaper. The GUI
+Choosing an image enables **Set as desktop wallpaper**; uncheck it to use only
+its palette. Review and approve to change the wallpaper. The GUI
 runs without a server or background service. [GUI workflows](docs/GUI.md) and
 [AppImage builds, artifacts and compatibility](docs/APPIMAGE.md) describe usage
 and distribution. The AppImage workflow builds an artifact on GitHub Actions.
@@ -44,7 +46,8 @@ The product direction is in [docs/DIRECTION.md](docs/DIRECTION.md).
 
 Requires Linux and Python 3.11+. Palette generation additionally needs Pillow.
 The engine never installs packages, invokes legacy apply hooks, replaces the
-wallpaper or signals applications. No pywal, particular desktop environment,
+wallpaper during discovery/preview, or signals applications. Explicitly reviewed
+wallpaper changes use the active desktop API. No pywal, particular desktop environment,
 account or external service is required for the new engine.
 
 Normal `./install.sh` explains the launch options without changes;
@@ -66,7 +69,8 @@ choices, links, ownership, disconnection and conflicts. The GUI exposes these wo
 | i3, Sway, Hyprland, GNOME, Plasma, Xfce | Available/running components and session evidence | Planned |
 | Polybar, Waybar, Rofi, Wofi, Dunst, Mako | Executables, processes, conventional configs | Planned |
 | GTK 3, GTK 4/libadwaita, Qt settings | Conventional config files; GTK 3 theme preferences | Planned |
-| zsh, fish, feh, swww, swaybg | Executables/processes and known config paths where applicable | Planned |
+| zsh, fish, swaybg | Executables/processes and known config paths where applicable | Discovery only |
+| Desktop wallpaper | Session-aware, read-only probes | GNOME and derivatives, Plasma Image, Xfce, swww/awww, compatible hyprpaper IPC, X11 feh; see [limits and recovery](docs/WALLPAPER.md) |
 
 Discovery is best-effort. PATH availability does not prove package installation;
 GTK library installation is reported as unknown. Custom launch flags, Flatpak,

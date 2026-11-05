@@ -193,6 +193,13 @@ ApplicationWindow {
                                 Command { visible: !!s.profile.wallpaper; text: "Clear"; quiet: true; enabled: !s.busy; onClicked: controller.setOption("wallpaper", "") }
                             }
                             Body { Layout.fillWidth: true; visible: !!s.profile.wallpaper; text: s.profile.wallpaper; font.pixelSize: 11 }
+                            CheckBox {
+                                text: "Set as desktop wallpaper"
+                                checked: !!s.profile.set_wallpaper
+                                enabled: !s.busy && s.loaded && !!s.profile.wallpaper
+                                onToggled: controller.setWallpaperEnabled(checked)
+                            }
+                            Body { Layout.fillWidth: true; text: "Your desktop is detected automatically when reviewing changes. No wallpaper changes happen until you approve."; font.pixelSize: 12 }
                             Body { text: "Appearance"; color: "#e7e7eb" }
                             RowLayout {
                                 Repeater {
@@ -310,7 +317,7 @@ ApplicationWindow {
                                     onClicked: { controller.selectComponent(modelData.id, !selected(modelData.id)); checked = Qt.binding(function() { return selected(modelData.id) }) }
                                     Accessible.name: "Use this palette in " + modelData.name
                                 }
-                                Body { visible: !modelData.supported; text: "Detection only"; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                                Body { visible: !modelData.supported; text: modelData.category === "Wallpaper" && modelData.id !== "swaybg" ? "Automatic wallpaper" : "Detection only"; font.pixelSize: 12; Layout.preferredWidth: 100 }
                             }
                             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#2c2e35" }
                         }
@@ -393,7 +400,7 @@ ApplicationWindow {
                     width: parent.width
                     spacing: 14
                     Body { Layout.fillWidth: true; text: evidence(inspected) }
-                    Body { Layout.fillWidth: true; text: inspected.supported ? "To use this palette, select Use palette in the applications list. These details are read-only." : "Detected only. Theme changes for this component are not supported yet." }
+                    Body { Layout.fillWidth: true; text: inspected.category === "Wallpaper" ? "Wallpaper changes are selected beside the image. The compatible method is detected during review; an installed tool alone does not establish support." : inspected.supported ? "To use this palette, select Use palette in the applications list. These details are read-only." : "Detected only. Theme changes for this component are not supported yet." }
                     Repeater {
                         model: inspected.configs || []
                         Body { required property var modelData; Layout.fillWidth: true; text: modelData.path + (modelData.symlink ? " → " + modelData.target : "") + (modelData.exists ? "" : " (missing)"); font.family: "monospace"; font.pixelSize: 12 }
@@ -460,9 +467,9 @@ ApplicationWindow {
             Body { visible: technicalNotes.checked; Layout.fillWidth: true; text: (s.review.warnings || []).join("\n"); font.pixelSize: 11 }
             RowLayout {
                 Layout.fillWidth: true
-                Body { Layout.fillWidth: true; text: (s.review.changes || []).length + " files · " + (s.review.kind === "undo" ? "Restoration is checked for conflicts" : "You can undo these changes from History"); font.pixelSize: 12 }
+                Body { Layout.fillWidth: true; text: (s.review.changes || []).length + " changes · " + (s.review.kind === "undo" ? "Restoration is checked for conflicts" : "You can undo these changes from History"); font.pixelSize: 12 }
                 Command { text: "Cancel"; enabled: !s.busy; onClicked: controller.cancelReview() }
-                Command { objectName: "approveChanges"; text: s.review.kind === "undo" ? "Restore files" : "Apply changes"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || (s.review.changes || []).length > 0); onClicked: controller.approve() }
+                Command { objectName: "approveChanges"; text: s.review.kind === "undo" ? "Restore changes" : "Apply changes"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || (s.review.changes || []).length > 0); onClicked: controller.approve() }
             }
         }
     }

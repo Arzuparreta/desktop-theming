@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from . import changes, configuration, inventory, ownership, theme
+from . import changes, configuration, inventory, ownership, theme, wallpaper
 
 DEFAULT_PROFILE = {"version": 1, "components": [], "wallpaper": "",
-                   "mode": "adaptive", "polarity": "dark", "resolutions": {}}
+                   "mode": "adaptive", "polarity": "dark", "resolutions": {}, "set_wallpaper": False}
 
 
 def validate_profile(value):
@@ -28,6 +28,8 @@ def validate_profile(value):
                 or not isinstance(options.get("replace_colors", False), bool)
                 or options.get("symlink", "preserve") not in ("preserve", "detach")):
             raise ValueError("Use replace_colors boolean and symlink preserve/detach resolutions.")
+    if not isinstance(result["set_wallpaper"], bool):
+        raise ValueError("set_wallpaper must be a boolean.")
     image = result["wallpaper"]
     if not isinstance(image, str) or any(c in image for c in "\r\n\0"):
         raise ValueError("Invalid wallpaper path.")
@@ -149,6 +151,15 @@ def make_plan(paths, profile, *, which=None):
         if report["has_existing_colors"]:
             warnings.append(f"{component}: replace the reviewed direct colors/color-only includes. "
                             "Their source files remain unchanged; disconnection retains restoration data.")
+    wallpaper_action = None
+    if profile["set_wallpaper"] and profile["wallpaper"]:
+        detected = wallpaper.detect(paths, profile["wallpaper"], which=which)
+        if not detected["available"]:
+            raise ValueError("Cannot change desktop wallpaper: " + "; ".join(detected["reasons"]) +
+                             " Disable 'Set as desktop wallpaper' to apply colors only.")
+        wallpaper_action = detected["action"]
+        if wallpaper_action["before"] == wallpaper_action["after"]:
+            wallpaper_action = None
     profile_change = changes.change(paths.profile, json.dumps(profile, indent=2) + "\n", paths.config)
     if profile_change:
         proposed.append(profile_change)
@@ -158,7 +169,7 @@ def make_plan(paths, profile, *, which=None):
         warnings.append(value["reason"])
     payload = {"version": 1, "profile": profile, "palette": value,
                "changes": proposed, "warnings": warnings, "inputs": inputs,
-               "configuration": inspections}
+               "configuration": inspections, "wallpaper_action": wallpaper_action}
     return dict(payload, id=changes.digest(payload))
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 
-from . import changes, presentation, service, theme
+from . import changes, presentation, service, theme, wallpaper
 from .paths import Paths
 
 
@@ -116,9 +116,18 @@ class Controller(QObject):
         profile[key] = value
         self.edit(profile)
 
+    @Slot(bool)
+    def setWallpaperEnabled(self, enabled):
+        profile = copy.deepcopy(self._state["profile"])
+        profile["set_wallpaper"] = enabled
+        self.edit(profile)
+
     @Slot(str)
     def chooseWallpaper(self, url):
-        self.setOption("wallpaper", QUrl(url).toLocalFile())
+        profile = copy.deepcopy(self._state["profile"])
+        profile["wallpaper"] = QUrl(url).toLocalFile()
+        profile["set_wallpaper"] = True
+        self.edit(profile)
 
     @Slot(str, bool)
     def selectComponent(self, component, selected):
@@ -195,6 +204,8 @@ class Controller(QObject):
             plan = result["plan"]
             self._review = ("apply", plan)
             files = [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]]
+            if plan.get("wallpaper_action"):
+                files.append(wallpaper.describe(plan["wallpaper_action"]))
             self.publish(review={"kind": "apply", "title": "Review changes", "summary": result["summary"],
                                  "changes": files, "warnings": plan["warnings"]}, palette=plan["palette"])
         self.start(operation, complete, context="review")
@@ -203,8 +214,11 @@ class Controller(QObject):
     def reviewUndo(self, ident, recover):
         def complete(plan):
             self._review = ("undo", plan)
+            files = [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]]
+            if plan.get("wallpaper_action"):
+                files.append(wallpaper.describe(plan["wallpaper_action"], reverse=True))
             self.publish(review={"kind": "undo", "title": "Recover changes" if recover else "Undo changes",
-                                 "changes": [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]],
+                                 "changes": files,
                                  "summary": ["Restore the previous configuration shown below. Later edits are preserved."],
                                  "warnings": []})
         self.start(lambda: changes.review_undo(self.paths, ident, recover=recover), complete, context="restore")

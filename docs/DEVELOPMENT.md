@@ -14,6 +14,7 @@ MCP and a small fallback CLI for agents are future adapters.
 - `desktop_theming/inventory.py`: read-only component and session discovery.
 - `desktop_theming/configuration.py`: conservative color/include inspection without evaluation.
 - `desktop_theming/ownership.py`: persistent ownership checks and disconnection restoration.
+- `desktop_theming/wallpaper.py`: read-only session probes, explicit setters and restoration checks.
 - `desktop_theming/theme.py`: palette engine access and terminal renderers.
 - `desktop_theming/service.py`: profile validation and reviewed plan generation/application.
 - `desktop_theming/changes.py`: conflict checks, file replacement and undo journals.
@@ -23,8 +24,9 @@ MCP and a small fallback CLI for agents are future adapters.
   legacy installation requires an explicit `--thinkpad` choice.
 
 The palette engine is reused without calling its application hooks. The new
-platform does not invoke pywal, change the wallpaper, write GTK settings or
-signal applications. Adding an adapter must preserve these boundaries.
+platform does not invoke pywal, write GTK theme settings or signal applications.
+Wallpaper setters run only for explicitly reviewed application/restoration, never
+during discovery or preview. See [adapter support and limitations](WALLPAPER.md).
 
 ## Service boundary
 
