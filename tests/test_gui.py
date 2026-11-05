@@ -18,7 +18,7 @@ if HAS_QT:
     os.environ["QT_QUICK_BACKEND"] = "software"
     from PySide6.QtCore import QObject, QPoint, Qt, QUrl, qInstallMessageHandler
     from PySide6.QtGui import QGuiApplication
-    from PySide6.QtQml import QQmlApplicationEngine
+    from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
     from PySide6.QtQuickControls2 import QQuickStyle
     from PySide6.QtTest import QTest
     from shiboken6 import delete
@@ -101,6 +101,19 @@ class GuiTests(unittest.TestCase):
         QTest.qWait(40)
         item = self.control(name)
         self.assertIsNotNone(item, name)
+        # Reveal controls in their scroll views before clicking, just as a user
+        # would when the window is too short for the full appearance column.
+        parent = item.parentItem()
+        while parent is not None:
+            if parent.inherits("QQuickFlickable"):
+                point = item.mapToItem(parent, item.boundingRect().center())
+                offset = max(0, point.y() - parent.height() + item.height())
+                if point.y() < 0:
+                    offset = point.y() - item.height()
+                limit = max(0, parent.property("contentHeight") - parent.height())
+                parent.setProperty("contentY", max(0, min(limit, parent.property("contentY") + offset)))
+                QTest.qWait(40)
+            parent = parent.parentItem()
         point = item.mapToScene(item.boundingRect().center())
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, QPoint(round(point.x()), round(point.y())))
         self.settle()
@@ -423,6 +436,92 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.controller.state["profile"]["wallpaper"], str(image))
         self.assertIn("%23", self.controller.state["wallpaperUrl"])
         self.assertFalse(self.paths.config.exists())
+        self.assertEqual(self.messages, [])
+
+    def wait_for_image(self):
+        image = self.control("wallpaperPreviewImage")
+        deadline = time.monotonic() + 5
+        ready = QQmlExpression(self.engine.rootContext(), image, "status === 1")  # Image.Ready
+        while not ready.evaluate()[0]:
+            self.app.processEvents()
+            QTest.qWait(20)
+            if time.monotonic() > deadline:
+                self.fail(f"Image did not load: {self.messages}")
+        QTest.qWait(40)
+        return image
+
+    def test_wallpaper_canvas_resizes_and_fits_different_image_shapes(self):
+        from PIL import Image
+
+        for shape in ((1920, 1080), (600, 1200), (800, 800), (3200, 800)):
+            path = self.root / f"{shape[0]}x{shape[1]}.png"
+            Image.new("RGB", shape, "#95a78d").save(path)
+            self.controller.chooseWallpaper(path.as_uri())
+            self.settle()
+            image = self.wait_for_image()
+            for width, height in ((1920, 1080), (1080, 780), (760, 600),
+                                  (2560, 720), (1000, 1400), (1920, 1080)):
+                with self.subTest(shape=shape, window=(width, height)):
+                    self.window.resize(width, height)
+                    QTest.qWait(60)
+                    frame = self.control("wallpaperPreviewFrame")
+                    self.assertAlmostEqual(frame.width() / frame.height(), 16 / 9, places=2)
+                    self.assertGreater(frame.height(), 160)
+                    self.assertLess(frame.height(), height * 0.65)
+                    self.assertLessEqual(image.property("paintedWidth"), frame.width() + 1)
+                    self.assertLessEqual(image.property("paintedHeight"), frame.height() + 1)
+                    self.assertAlmostEqual(image.property("paintedWidth") /
+                                           image.property("paintedHeight"), shape[0] / shape[1], places=2)
+                    if shape == (1920, 1080):
+                        self.assertAlmostEqual(image.property("paintedHeight"), frame.height(), delta=1)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
+        self.assertEqual(self.messages, [])
+
+    def test_wallpaper_fit_fill_rendering_and_folder_preview_are_read_only(self):
+        from PIL import Image, ImageDraw
+
+        folder = self.root / "wallpapers"
+        folder.mkdir()
+        path = folder / "portrait.png"
+        source = Image.new("RGB", (600, 1200), "#ff0000")
+        ImageDraw.Draw(source).rectangle((0, 400, 600, 800), fill="#00ff00")
+        source.save(path)
+        self.choose_folder(folder, 1)
+        self.click("wallpaper-row-0")
+        image = self.wait_for_image()
+        self.click("wallpaperPreviewFit")
+        self.control("appearanceScroll").property("contentItem").setProperty("contentY", 0)
+        QTest.qWait(60)
+        frame = self.control("wallpaperPreviewFrame")
+        self.assertTrue(frame.property("visible"))
+        profile = dict(self.controller.state["profile"])
+
+        def sample(x, y):
+            point = frame.mapToScene(frame.boundingRect().topLeft())
+            rendered = self.window.grabWindow()
+            scale = rendered.width() / self.window.width()
+            return rendered.pixelColor(round((point.x() + frame.width() * x) * scale),
+                                       round((point.y() + frame.height() * y) * scale)).name()
+
+        def assert_sample(x, y, expected):
+            # Qt schedules the scene-graph repaint after the input event; slower
+            # CI renderers can still return the previous frame on the first grab.
+            deadline = time.monotonic() + 3
+            while sample(x, y) != expected and time.monotonic() < deadline:
+                QTest.qWait(20)
+            self.assertEqual(sample(x, y), expected)
+
+        assert_sample(0.5, 0.05, "#ff0000")
+        assert_sample(0.05, 0.5, "#111318")
+        self.click("wallpaperPreviewFill")
+        assert_sample(0.05, 0.5, "#00ff00")
+        self.assertGreater(image.property("paintedHeight"), frame.height())
+        self.click("wallpaperPreviewFit")
+        assert_sample(0.05, 0.5, "#111318")
+        self.assertEqual(self.controller.state["profile"], profile)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.messages, [])
 
     def test_wallpaper_selection_review_apply_and_undo_use_the_same_flow(self):
