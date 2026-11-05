@@ -19,3 +19,14 @@ The AppImage is extractable (`--appimage-extract`). Qt shared libraries are in
 ABI-compatible builds. License files and package metadata shipped by the Python
 wheels are included under `usr/app/_internal/licenses` where available. This
 notice supplements upstream notices; it does not replace module-specific terms.
+
+## Icon artwork
+
+Tux was created by Larry Ewing (lewing@isc.tamu.edu) using The GIMP.
+The application icon crops the original illustration and adds three theme color
+swatches. Source: https://commons.wikimedia.org/wiki/File:Tux.png
+Original project: https://isc.tamu.edu/~lewing/linux/
+
+Permission to use and/or modify this image is granted provided you acknowledge
+Larry Ewing (lewing@isc.tamu.edu) and The GIMP if someone asks.
+The original image and this attribution are also embedded in `desktop_theming/ui/icon.svg`.
