@@ -2,11 +2,22 @@
 
 AppImage fits this local control center: the payload contains Python, the engine,
 Pillow, PySide6, Qt libraries/QML modules and platform plugins. It uses the host's
-PATH and HOME/XDG directories without a broker or sandbox. Opening it only reads
-configuration; changes still require review and approval in the GUI.
+PATH and HOME/XDG directories without a broker or sandbox. Desktop discovery only reads configuration; desktop changes still require review
+and approval in the GUI. Choosing an image or folder saves only navigation state.
 Running an AppImage does not install packages, a second copy or a background
 service. Local and release AppImages use the same HOME/XDG profile and history.
 Replacing the executable does not require deleting that data.
+
+Qt QSettings remembers the last chosen image and image folder in
+`$XDG_CONFIG_HOME/desktop-theming/navigation.ini` (default:
+`~/.config/desktop-theming/navigation.ini`). Only these two paths are saved, with
+no image copies or browsing history. Startup restores existing paths for browsing
+and preview only; it never applies desktop changes or restores approvals.
+Missing paths are ignored. Delete this file while the app is closed to forget
+navigation. Writes use Qt atomic synchronization, private file permissions and
+reject symlink files or nested directories. Unwritable settings do not prevent
+preview; the app displays a notice. The applied profile and undo history remain
+separate from this navigation state.
 
 AppImage is a distribution container, not a universal Linux ABI. Build on the
 oldest supported base and test the result on each intended distribution. The CI

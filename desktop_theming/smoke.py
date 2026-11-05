@@ -79,7 +79,9 @@ def exercise(app, engine, controller):
                 if not s["profile"]["wallpaper"].endswith("a #1.png") or not s["palette"]:
                     raise ValueError("Folder image preview failed")
                 if controller.paths.profile.exists() or controller.paths.state.exists():
-                    raise ValueError("Image selection wrote local data")
+                    raise ValueError("Image selection wrote profile or transaction data")
+                if not (controller.paths.config / "desktop-theming/navigation.ini").exists():
+                    raise ValueError("Navigation settings were not saved")
                 controller.setWallpaperEnabled(False)
             elif step == 5:
                 controller.selectComponent("kitty", True)

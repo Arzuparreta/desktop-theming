@@ -38,9 +38,9 @@ ApplicationWindow {
     palette.highlightedText: "#17191d"
     onClosing: function(close) { if (s.busy) close.accepted = false }
 
-    function openWallpaperPicker() { wallpaperPicker.open() }
+    function openWallpaperPicker() { if (controller.navigationFolderUrl) wallpaperPicker.currentFolder = controller.navigationFolderUrl; wallpaperPicker.open() }
     function closeWallpaperPicker() { wallpaperPicker.close() }
-    function openFolderPicker() { folderPicker.open() }
+    function openFolderPicker() { if (controller.navigationFolderUrl) folderPicker.currentFolder = controller.navigationFolderUrl; folderPicker.open() }
     function closeFolderPicker() { folderPicker.close() }
     function selected(id) { return s.profile.components.indexOf(id) >= 0 }
     function evidence(c) {
@@ -69,8 +69,8 @@ ApplicationWindow {
     }
     function handleProblem() {
         switch (s.problem.action) {
-        case "image": wallpaperPicker.open(); break
-        case "folder": folderPicker.open(); break
+        case "image": openWallpaperPicker(); break
+        case "folder": openFolderPicker(); break
         case "save": exportPicker.open(); break
         case "review": controller.review(); break
         case "history": page = 2; break
@@ -191,8 +191,8 @@ ApplicationWindow {
                             availableHeight: sourceScroll.availableHeight
                         }
                         RowLayout {
-                            Command { objectName: "chooseImage"; text: "Image…"; enabled: !s.busy && s.loaded; onClicked: wallpaperPicker.open() }
-                            Command { objectName: "chooseFolder"; text: "Folder…"; enabled: !s.busy && s.loaded; onClicked: folderPicker.open() }
+                            Command { objectName: "chooseImage"; text: "Image…"; enabled: !s.busy && s.loaded; onClicked: openWallpaperPicker() }
+                            Command { objectName: "chooseFolder"; text: "Folder…"; enabled: !s.busy && s.loaded; onClicked: openFolderPicker() }
                             Command { visible: !!s.profile.wallpaper; text: "Clear"; quiet: true; enabled: !s.busy; onClicked: controller.setOption("wallpaper", "") }
                         }
                         CheckBox {
