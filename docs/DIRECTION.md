@@ -41,19 +41,27 @@ the rest of my desktop alone."
 - No dependency on pywal or a particular window manager for discovery or the
   new control center. Retain the original workflow as an explicit legacy option.
 
-## First delivery
+## Current foundation and next interface
 
-A local browser interface and matching CLI provide read-only inventory,
-explicit component selection, palette preview, exact change review and undo.
-Connecting and disconnecting an integration are both reviewed, reversible changes.
+The current checkout provides a Python engine for read-only inventory, explicit
+component selection, palette preview, exact change plans, application, undo and
+recovery. There is no GUI, HTTP server, application launcher, configuration CLI
+or MCP implementation. GUI toolkit, layout and visual design remain open.
+
+The next interface is a GUI over the engine. It must expose existing color
+sources, unresolved issues, explicit color replacement and symlink handling,
+exact file changes, approval, disconnection and recovery. No user should need a
+terminal command to finish those workflows. A future MCP interface and small
+fallback CLI for agents will use the same engine.
+
 Kitty and Ghostty are the first managed integrations. Other components are
-visible as discovery-only, not advertised as fully supported. The application
-binds only to the local machine and needs no account or external service.
+reported as discovery-only, not advertised as fully supported. Connecting and
+disconnecting an integration are both reviewed, reversible changes.
 
-Running discovery or opening the interface must not alter desktop settings.
-Applying a plan changes only the selected integrations and the tool's own
-profile/history. No automatic package installation, process signalling,
-session reload or wallpaper replacement is included in this delivery.
+Discovery must not alter desktop settings. Applying a plan changes only the
+selected integrations and the engine's own profile/history. No automatic package
+installation, process signalling, session reload or wallpaper replacement is
+included in this foundation.
 
 ## Next outcomes
 

@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,9 +8,6 @@ from unittest.mock import patch
 
 from desktop_theming import changes, inventory, service, theme
 from desktop_theming.paths import Paths
-
-REPO = Path(__file__).resolve().parents[1]
-
 
 class PlatformTests(unittest.TestCase):
     def setUp(self):
@@ -91,7 +87,7 @@ class PlatformTests(unittest.TestCase):
         original = self.write("kitty/kitty.conf", "font_size 15\n")
         plan = self.plan()
         self.assertEqual(original.read_text(), "font_size 15\n")
-        self.assertEqual(len(plan["changes"]), 3)
+        self.assertEqual(len(plan["changes"]), 4)
         self.assertFalse(self.paths.profile.exists())
         self.assertFalse(self.paths.state.exists())
         self.assertFalse(self.paths.theme("kitty").exists())
@@ -130,6 +126,7 @@ class PlatformTests(unittest.TestCase):
         config = self.paths.config / "kitty/kitty.conf"
         config.parent.mkdir(parents=True)
         config.symlink_to(source)
+        self.profile["resolutions"] = {"kitty": {"symlink": "detach"}}
         plan = self.plan()
         self.assertTrue(any(item["detach_symlink"] for item in plan["changes"]))
         result = self.apply(plan)
@@ -281,28 +278,6 @@ class PlatformTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Existing file preserved"):
             self.plan()
         self.assertEqual(config.read_text(), "invalid json")
-
-    def test_cli_round_trip_requires_explicit_approval(self):
-        env = dict(os.environ, HOME=str(self.root), XDG_CONFIG_HOME=str(self.paths.config),
-                   XDG_STATE_HOME=str(self.paths.state))
-        plan_file = self.root / "reviewed.json"
-
-        def cli(*args):
-            return subprocess.run([str(REPO / "bin/desktop-theming"), *args], env=env,
-                                  text=True, capture_output=True, check=False)
-
-        planned = cli("plan", "--mode", "safe", "--output", str(plan_file))
-        self.assertEqual(planned.returncode, 0, planned.stderr)
-        self.assertFalse(self.paths.profile.exists())
-        rejected = cli("apply", "--plan", str(plan_file))
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertFalse(self.paths.profile.exists())
-        applied = cli("apply", "--plan", str(plan_file), "--yes")
-        self.assertEqual(applied.returncode, 0, applied.stderr)
-        ident = json.loads(applied.stdout)["id"]
-        undone = cli("undo", ident, "--yes")
-        self.assertEqual(undone.returncode, 0, undone.stderr)
-        self.assertFalse(self.paths.profile.exists())
 
     def test_tampered_palette_cannot_bypass_plan_validation(self):
         original = self.plan()

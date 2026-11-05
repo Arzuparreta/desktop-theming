@@ -38,6 +38,8 @@ def text_of(value):
 
 
 def text_snapshot(text, mode=0o600):
+    if len(text.encode()) > 2 * 1024 * 1024:
+        raise ValueError("Proposed configuration or ownership data is too large to manage safely.")
     return {"kind": "file", "content": base64.b64encode(text.encode()).decode(), "mode": mode}
 
 
@@ -61,12 +63,26 @@ def change(path, content, config_root):
     before = snapshot(path)
     after = (text_snapshot(content, before.get("mode", 0o600)) if content is not None
              else {"kind": "missing"})
+    return replacement(path, after, config_root, before=before)
+
+
+def replacement(path, after, config_root, *, before=None):
+    safe_parents(path, config_root)
+    before = snapshot(path) if before is None else before
     if before == after:
         return None
+    metadata = ""
+    if before["kind"] != after["kind"]:
+        metadata += f"File type: {before['kind']} -> {after['kind']}\n"
+    for label, state in (("current", before), ("proposed", after)):
+        if state["kind"] == "symlink":
+            metadata += f"Symlink target ({label}): {state['target']}\n"
+    if before.get("mode") != after.get("mode"):
+        metadata += f"File mode: {before.get('mode')} -> {after.get('mode')}\n"
     return {"path": str(path), "before": before, "after": after,
             "detach_symlink": before["kind"] == "symlink",
-            "diff": "".join(difflib.unified_diff(
-                text_of(before).splitlines(keepends=True), (content or "").splitlines(keepends=True),
+            "diff": metadata + "".join(difflib.unified_diff(
+                text_of(before).splitlines(keepends=True), text_of(after).splitlines(keepends=True),
                 fromfile=f"{path} (current)", tofile=f"{path} (proposed)"))}
 
 
@@ -129,13 +145,21 @@ def check_changes(changes, expected, paths):
                              "Review a fresh plan; no files were changed.")
 
 
+def check_inputs(inputs):
+    for item in inputs:
+        if digest(snapshot(Path(item["path"]))) != item["fingerprint"]:
+            raise ValueError(f"Configuration dependency changed since review: {item['path']}. "
+                             "Review a fresh plan; no files were changed.")
+
+
 def apply(paths, plan):
     with locked(paths):
         pending = [item for item in history(paths) if item["status"] in
                    ("prepared", "recovery-needed", "undoing")]
         if pending:
             raise ValueError("An interrupted transaction needs recovery. "
-                             f"Run desktop-theming recover {pending[0]['id']} --yes.")
+                             f"Recover transaction {pending[0]['id']} from change history before applying again.")
+        check_inputs(plan.get("inputs", []))
         check_changes(plan["changes"], "before", paths)
         if not plan["changes"]:
             return {"id": None, "status": "unchanged"}

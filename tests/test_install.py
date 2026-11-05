@@ -24,26 +24,20 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_installation_only_adds_launcher_and_is_idempotent(self):
+    def test_normal_apply_refuses_without_creating_any_files(self):
         result = self.install("--apply")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        target = self.home / ".local/bin/desktop-theming"
-        self.assertEqual(target.resolve(), REPO / "bin/desktop-theming")
-        self.assertFalse((self.home / ".config").exists())
-        self.assertFalse((self.home / ".zshrc").exists())
-        result = self.install("--apply")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(list(target.parent.iterdir())), 1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("engine only", result.stderr)
+        self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_existing_launcher_is_backed_up(self):
+    def test_normal_apply_preserves_existing_launcher(self):
         target = self.home / ".local/bin/desktop-theming"
         target.parent.mkdir(parents=True)
-        target.write_text("old launcher\n")
+        target.write_text("existing user launcher\n")
         result = self.install("--apply")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        backup = list(target.parent.glob("desktop-theming.bak-*"))
-        self.assertEqual(len(backup), 1)
-        self.assertEqual(backup[0].read_text(), "old launcher\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(target.read_text(), "existing user launcher\n")
+        self.assertEqual(list(target.parent.iterdir()), [target])
 
 
 if __name__ == "__main__":

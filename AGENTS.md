@@ -16,3 +16,6 @@ Read `docs/DIRECTION.md` before choosing product scope or architecture.
 - Document which integrations are discovery-only and which can apply themes.
 - Run `python3 -m unittest discover -s tests -v`, `ruff check desktop_theming
   tests`, and `bash -n install.sh` for changes to the new platform.
+
+- Commit and push completed repository changes to GitHub before ending a turn.
+  Report failed checks or pushes explicitly; never force-push.

@@ -6,17 +6,25 @@ are one historical example, not the architecture or a required desktop stack.
 ## Delivered foundation
 
 - [x] Read-only inventory with separate executable, process, config and session evidence.
-- [x] Local control center and matching CLI; no account or package installation.
+- [x] Shared Python engine independent of any user interface.
 - [x] Empty initial management selection; explicit opt-in for each integration.
 - [x] Reuse the accessible palette engine without legacy application hooks or pywal.
 - [x] Kitty and Ghostty generated themes and marked includes preserving other preferences.
-- [x] Palette preview, exact file review and explicit application approval.
+- [x] Palette generation and exact change plans for review before application.
 - [x] Conflict checks, previous file contents, rollback, undo and interrupted recovery.
 - [x] Reviewed disconnection of an integration, independently reversible.
-- [x] HOME/XDG isolation in functional tests and desktop/mobile browser acceptance.
-- [x] Safe launcher-only installation; ThinkPad workflow requires an explicit legacy choice.
+- [x] HOME/XDG isolation in engine and installer tests.
+- [x] Normal installation refuses changes while no application is provided; legacy requires explicit choice.
+
+- [x] Inspect existing terminal color sources; require explicit replacement and link detachment.
+- [x] Persistent color ownership, conflict detection and restoration on disconnection.
+- [x] Standalone theme rendering in the engine for user-managed dotfiles.
 
 ## Next complete workflows
+
+- [ ] Build the GUI: inventory, color-source inspection, explicit replacement/link choices,
+      previews, exact review, approval, standalone export, undo and recovery.
+- [ ] MCP interface for agents, followed by a small fallback CLI over the shared engine.
 
 - [ ] Named profiles: create, compare, switch and export component selections and theme settings.
 - [ ] Alacritty and foot integration, including config-format/version differences.
@@ -30,6 +38,7 @@ are one historical example, not the architecture or a required desktop stack.
 - [ ] GTK 3 preference management with selectable installed light/dark themes.
 - [ ] Separate GTK 4/libadwaita, GNOME, KDE/Qt and Xfce capabilities and validation.
 - [ ] Improve discovery for custom config locations, Flatpak and runtime desktop settings.
+- [ ] Extend conservative parsing to quoted/optional includes and Ghostty resource themes.
 - [ ] Optional reviewed dependency installation with per-distribution package information.
 - [ ] Portable example profiles with no personal paths, services or hardware assumptions.
 

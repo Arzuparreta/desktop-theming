@@ -30,3 +30,6 @@ class Paths:
 
     def theme(self, component):
         return self.config / f"desktop-theming/themes/{component}.conf"
+
+    def ownership(self, component):
+        return self.config / f"desktop-theming/ownership/{component}.json"
