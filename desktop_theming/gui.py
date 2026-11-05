@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 
-from . import changes, navigation, presentation, service, theme, wallpaper
+from . import appearance, changes, navigation, presentation, service, theme, wallpaper
 from .paths import Paths
 
 
@@ -267,6 +267,7 @@ class Controller(QObject):
             files = [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]]
             if plan.get("wallpaper_action"):
                 files.append(wallpaper.describe(plan["wallpaper_action"]))
+            files.extend(appearance.describe(action) for action in plan.get("settings_actions", []))
             self.publish(review={"kind": "apply", "title": "Review changes", "summary": result["summary"],
                                  "changes": files, "warnings": plan["warnings"]}, palette=plan["palette"])
         self.start(operation, complete, context="review")
@@ -278,6 +279,7 @@ class Controller(QObject):
             files = [dict(item, label=presentation.describe_file(self.paths, item)) for item in plan["changes"]]
             if plan.get("wallpaper_action"):
                 files.append(wallpaper.describe(plan["wallpaper_action"], reverse=True))
+            files.extend(appearance.describe(action, reverse=True) for action in plan.get("settings_actions", []))
             self.publish(review={"kind": "undo", "title": "Recover changes" if recover else "Undo changes",
                                  "changes": files,
                                  "summary": ["Restore the previous configuration shown below. Later edits are preserved."],
@@ -309,7 +311,7 @@ class Controller(QObject):
             result, overview = value
             self.publish(overview=overview, profile=copy.deepcopy(overview["profile"]),
                          review={}, palette={}, exportText="",
-                         notice=("Changes applied. Reopen your terminal or use its reload action."
+                         notice=("Changes applied. Reopen applications or use their reload actions where needed."
                                  if result["status"] == "applied" else "Previous configuration restored."))
             # Keep the completion notice while regenerating the preview.
             self.timer.start()

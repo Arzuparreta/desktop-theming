@@ -50,7 +50,10 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
   Images honor orientation metadata and decode asynchronously within a bounded
   2560×1440 size, independently of window resizing. Missing/unreadable images
   show an explicit preview message.
-- **Components:** select **Use palette** beside Kitty or Ghostty. The application
+- **Components:** select **Use palette** beside a supported integration,
+  **Use appearance** for native GNOME/Xfce preferences, or **Use image** for Sway
+  background configuration. Each row explains its exact scope and activation;
+  see [the integration matrix](INTEGRATIONS.md). The application
   checks the current configuration first. A linked config or existing colors
   opens an explanation immediately, with separate, initially unchecked choices
   for creating a local copy and replacing colors. Continue only after consenting
@@ -58,15 +61,17 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
 - **Configuration details:** the optional **Details…** view is read-only. It shows
   executable availability, user processes, active-session evidence, config files,
   color directives/includes and unresolved issues. Required choices never live
-  here. Other components say **Detection only** and cannot be selected for themes.
-  Unavailable detection-only components are hidden until **Show all checked
-  components** is selected; supported terminals remain visible even if missing.
+  here. Live wallpaper providers use the separate reviewed wallpaper control;
+  Swaybg offers background file configuration for the next manual Sway reload.
+  Supported integrations remain visible when missing. GTK library availability
+  is unknown; its CSS can still be selected without an installation claim.
 - **Unsupported configurations:** linked configuration folders, mixed/dynamic
   includes and ownership conflicts are explained before selection, without
   bypassing engine checks. Export remains available and explicitly does not
   connect the terminal; manual inclusion is still necessary for an exported file.
 - **Review:** begins with a plain-language summary: palette, affected terminals,
-  preserved preferences, link consequences and how to see the colors. Wallpaper
+  preserved preferences, link consequences and how to see the colors. Native
+  GNOME/Xfce preference changes show their individual previous/proposed values. Wallpaper
   changes include previous/proposed values per screen or setting. If no safe
   adapter is available, the review explains why; uncheck the wallpaper choice
   to apply colors only. See [wallpaper compatibility](WALLPAPER.md). Each file
@@ -82,14 +87,17 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
   Review shows the exact remaining reverse changes. Later edits and journal
   changes invalidate approval; conflicts are displayed without overwriting them.
   Interrupted transactions also show a direct recovery action above the main view.
-- **Export:** choose Kitty or Ghostty, inspect the generated theme, copy it or
-  save a new file. Saving refuses existing files and symlinks; select a new name.
+- **Export:** choose a native file format from the format selector, inspect the
+  generated theme, copy it or save a new file. Native GNOME/Xfce preferences are
+  reviewed settings, not standalone theme files. Saving refuses existing files
+  and symlinks; select a new name.
 
 Ctrl+Enter opens review. **Check desktop** and Ctrl+R rescan inventory while
 keeping pending palette and application choices.
 Buttons are disabled during serialized background work. Closing waits until the
 current operation finishes. No application is signalled or restarted; use the
-terminal's own reload action or reopen it after applying.
+application's own reload action or reopen it after applying. Native settings and
+applications that watch files may update immediately.
 
 ## Validation
 
@@ -113,7 +121,9 @@ centered cropping. Switching preview modes must not change the profile or files.
 The bundled smoke test always replaces HOME/XDG/PATH with a temporary fixture before creating Qt. It
 loads the actual QML and exercises image/folder dialogs, the thumbnail list, image
 selection and guided connection from a linked configuration,
-review, apply, link restoration and export without using the real desktop.
+review, apply, link restoration and export without using the real desktop. It
+also exercises all eighteen new file adapters through composition, application,
+update, idempotence, export, disconnection and ordered undo.
 
 Offscreen checks do not establish appearance in a real Kitty/Ghostty process,
 Wayland/X11 compositor integration, screen-reader behavior or distribution-wide

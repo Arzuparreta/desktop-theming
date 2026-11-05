@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from . import changes, configuration, inventory, ownership, theme, wallpaper
+from . import appearance, changes, configuration, integrations, inventory, ownership, theme, wallpaper
 
 DEFAULT_PROFILE = {"version": 1, "components": [], "wallpaper": "",
                    "mode": "adaptive", "polarity": "dark", "resolutions": {}, "set_wallpaper": False}
@@ -17,7 +17,7 @@ def validate_profile(value):
     if (not isinstance(components, list) or any(not isinstance(c, str) for c in components)
             or len(components) != len(set(components))
             or not set(components) <= inventory.SUPPORTED):
-        raise ValueError("Select only supported components: kitty, ghostty.")
+        raise ValueError("Select only supported components: " + ", ".join(sorted(inventory.SUPPORTED)) + ".")
     if result["mode"] not in ("adaptive", "safe") or result["polarity"] not in ("dark", "light"):
         raise ValueError("Invalid theme mode or polarity.")
     resolutions = result["resolutions"]
@@ -77,18 +77,47 @@ def make_plan(paths, profile, *, which=None):
     found = inventory.discover(paths, which=which)
     available = {item["id"]: item for item in found["components"]}
     for component in profile["components"]:
-        if not available[component]["installed"]:
+        if available[component]["installed"] is False:
             raise ValueError(f"{component} is not on PATH. Install it explicitly before "
                              "selecting this integration; no packages have been installed.")
     value = theme.palette(profile)
-    proposed, warnings, inputs, inspections = [], [], [], {}
+    proposed, warnings, inputs, inspections, settings_actions = [], [], [], {}, []
 
     def propose(path, content):
         item = changes.change(path, content, paths.config)
         if item:
             proposed.append(item)
 
+    file_changes, file_inputs, file_reports = integrations.plan_all(paths, previous, profile, value, which=which)
+    proposed.extend(file_changes)
+    inputs.extend(file_inputs)
+    inspections.update(file_reports)
+    for component in sorted((removed | set(profile["components"])) & set(integrations.FILES)):
+        warnings.append(integrations.CAPABILITIES[component])
+        if component in removed:
+            warnings.append(f"Disconnect {component}: restore its recorded previous appearance settings.")
+        elif file_reports[component].get("linked_paths"):
+            warnings.append(f"{component}: detach the reviewed links into local files; their original targets remain untouched.")
     for component in sorted(removed | set(profile["components"])):
+        if component in integrations.FILES:
+            continue
+        if component in appearance.COMPONENTS:
+            record = appearance.load(paths, component)
+            if component in previous["components"] and record is None:
+                raise ValueError(f"{component} has a saved selection without an ownership record; restore or resolve it first.")
+            if record is not None and component not in previous["components"]:
+                raise ValueError(f"Orphan ownership record for {component}; resolve it before planning.")
+            options = profile["resolutions"].get(component, {})
+            items, action, report = appearance.plan(paths, component, value, options,
+                                                   remove=component in removed, which=which)
+            proposed.extend(item for item in items if item)
+            if action:
+                settings_actions.append(action)
+            inspections[component] = report
+            warnings.append(integrations.CAPABILITIES[component])
+            if component in removed:
+                warnings.append(f"Disconnect {component}: restore its recorded previous appearance settings.")
+            continue
         config = inventory.config_target(paths, component)
         current = changes.snapshot(config)
         record = ownership.load(paths, component)
@@ -152,7 +181,7 @@ def make_plan(paths, profile, *, which=None):
             warnings.append(f"{component}: replace the reviewed direct colors/color-only includes. "
                             "Their source files remain unchanged; disconnection retains restoration data.")
     wallpaper_action = None
-    if profile["set_wallpaper"] and profile["wallpaper"]:
+    if profile["set_wallpaper"] and profile["wallpaper"] and "swaybg" not in profile["components"]:
         detected = wallpaper.detect(paths, profile["wallpaper"], which=which)
         if not detected["available"]:
             raise ValueError("Cannot change desktop wallpaper: " + "; ".join(detected["reasons"]) +
@@ -163,13 +192,15 @@ def make_plan(paths, profile, *, which=None):
     profile_change = changes.change(paths.profile, json.dumps(profile, indent=2) + "\n", paths.config)
     if profile_change:
         proposed.append(profile_change)
-    warnings.append("No application is restarted or reloaded. Restart the selected terminal "
-                    "or use its own reload action to see the theme.")
+    warnings.append("No application is signalled, restarted or explicitly reloaded. "
+                    "Some applications watch their files and native desktop preferences take effect immediately. "
+                    "Otherwise reopen the selected application or use its own reload action.")
     if value["reason"]:
         warnings.append(value["reason"])
     payload = {"version": 1, "profile": profile, "palette": value,
                "changes": proposed, "warnings": warnings, "inputs": inputs,
-               "configuration": inspections, "wallpaper_action": wallpaper_action}
+               "configuration": inspections, "wallpaper_action": wallpaper_action,
+               "settings_actions": settings_actions}
     return dict(payload, id=changes.digest(payload))
 
 

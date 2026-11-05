@@ -28,9 +28,17 @@ are resolved before review; application never switches to an unreviewed adapter.
 | Hyprland + hyprpaper | Preload and set image per active output | Legacy `hyprctl hyprpaper listactive/preload/wallpaper` IPC, checked at runtime. New protocols without these queries are unsupported. Commas in image paths are rejected. Loaded images are not unloaded |
 | X11 + feh (e.g. i3/Openbox) | Root background using `--bg-fill --no-fehbg` | Requires a simple parseable existing `.fehbg` restoration record and xprop root pixmap evidence. The script is never executed, and `.fehbg` is never rewritten, including symlinks |
 
-Swaybg, sway's background configuration, nitrogen, xwallpaper, PCManFM/LXQt,
+Swaybg has a separate **Use image** configuration workflow: it edits literal
+background directives in `sway/config` for your next manual Sway reload. It never
+launches/replaces the running process or claims to query its live background.
+When selected, this reviewed file workflow takes precedence over live wallpaper
+application. It composes with the Sway border adapter and retains exact original
+output settings for disconnect/undo. Includes and complex output blocks are
+blocked; see [INTEGRATIONS.md](INTEGRATIONS.md).
+
+Nitrogen, xwallpaper, PCManFM/LXQt,
 Enlightenment and other services without implemented read/restore protocols
-remain discovery-only or unsupported. In Sway, an already running swww/awww can
+remain unsupported. In Sway, an already running swww/awww can
 be used. The application does not replace an existing swaybg process or launch
 an alternative. Missing support blocks the requested wallpaper change with an
 explanation; terminal colors can still be applied by unchecking the choice.

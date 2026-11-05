@@ -14,6 +14,8 @@ MCP and a small fallback CLI for agents are future adapters.
 - `desktop_theming/inventory.py`: read-only component and session discovery.
 - `desktop_theming/configuration.py`: conservative color/include inspection without evaluation.
 - `desktop_theming/ownership.py`: persistent ownership checks and disconnection restoration.
+- `desktop_theming/integrations.py`, `formats.py`: native file adapters, conservative editors and shared-file composition.
+- `desktop_theming/appearance.py`: read-only native appearance probes and reviewed GNOME/Xfce preferences.
 - `desktop_theming/wallpaper.py`: read-only session probes, explicit setters and restoration checks.
 - `desktop_theming/theme.py`: palette engine access and terminal renderers.
 - `desktop_theming/service.py`: profile validation and reviewed plan generation/application.
@@ -24,7 +26,7 @@ MCP and a small fallback CLI for agents are future adapters.
   legacy installation requires an explicit `--thinkpad` choice.
 
 The palette engine is reused without calling its application hooks. The new
-platform does not invoke pywal, write GTK theme settings or signal applications.
+platform does not invoke pywal, legacy apply hooks or signal applications.
 Wallpaper setters run only for explicitly reviewed application/restoration, never
 during discovery or preview. See [adapter support and limitations](WALLPAPER.md).
 
@@ -73,6 +75,8 @@ undo order, disconnection and normal installation without desktop changes.
   real-session compositor and assistive-technology behavior remain to be verified.
 - AppImage: bundled smoke diagnostic; CI targets Ubuntu 22.04 x86_64, not a verified distribution matrix.
 - Engine discovery, configuration planning and transactions: isolated automated tests.
+- New file adapters and native GNOME/Xfce preferences: see the per-integration
+  [scope, native parser checks and simulated protocol evidence](INTEGRATIONS.md).
 - Kitty/Ghostty rendering: palette and configuration tests; rendered appearance and
   reload in a real session remain to be verified.
 - Original ThinkPad workflow: preserved; never reapplied to validate this engine.

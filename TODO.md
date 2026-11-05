@@ -27,17 +27,19 @@ are one historical example, not the architecture or a required desktop stack.
 - [ ] MCP interface for agents, followed by a small fallback CLI over the shared engine.
 
 - [ ] Named profiles: create, compare, switch and export component selections and theme settings.
-- [ ] Alacritty and foot integration, including config-format/version differences.
+- [x] Alacritty and foot integration, including conservative TOML and version-specific INI formats.
 - [ ] Verify Ghostty configuration and appearance in a real Ghostty session.
 - [ ] Report applied file state versus running application state; explicit reload actions
       with adapter-specific support, never automatic during discovery or install.
 - [x] File chooser for wallpaper color sources.
 - [ ] Per-profile wallpaper libraries.
-- [ ] Rofi/Wofi and Dunst/Mako palette adapters with interaction-state contrast checks.
-- [ ] Polybar/Waybar adapters that preserve modules, hardware choices and existing styles.
-- [ ] Wallpaper providers: X11 first, then Sway/Hyprland with explicit backend selection.
-- [ ] GTK 3 preference management with selectable installed light/dark themes.
-- [ ] Separate GTK 4/libadwaita, GNOME, KDE/Qt and Xfce capabilities and validation.
+- [x] Rofi/Wofi and Dunst/Mako palette defaults, interaction/urgency roles and contrast checks.
+- [x] Polybar/Waybar adapters that preserve modules, hardware choices and existing styles.
+- [x] Session-selected live wallpaper adapters and reviewed Swaybg background configuration.
+- [x] Separate GTK 3/4 CSS, native GNOME mode/accent and Xfce installed theme counterparts.
+- [x] KDE application color roles and qt5ct/qt6ct palettes with separate capability/validation records.
+- [x] i3/Sway/Hyprland border roles and shared Sway/background file composition.
+- [ ] Verify every new adapter's actual appearance in disposable real desktop sessions.
 - [ ] Improve discovery for custom config locations, Flatpak and runtime desktop settings.
 - [ ] Extend conservative parsing to quoted/optional includes and Ghostty resource themes.
 - [ ] Optional reviewed dependency installation with per-distribution package information.
@@ -45,7 +47,8 @@ are one historical example, not the architecture or a required desktop stack.
 
 ## Later composition options
 
-- [ ] Fish and zsh style adapters; optional prompt segments using the common palette.
+- [x] Fish and zsh interactive editor/syntax/pager style adapters, preserving prompts.
+- [ ] Optional prompt segments using the common palette.
 - [ ] Per-component overrides, icon/cursor selection and contrast explanations.
 - [ ] Optional time-of-day or sensor-based appearance switching with explicit enrollment.
 - [ ] Wallpaper thumbnails and library browsing.

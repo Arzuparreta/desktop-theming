@@ -55,9 +55,12 @@ exact file changes, approval, disconnection and recovery. No user needs a termin
 command to finish those workflows. A future MCP interface and small fallback CLI
 for agents will use the same engine.
 
-Kitty and Ghostty are the first managed integrations. Wallpaper changes use automatically selected, session-specific adapters with
-reviewed application and conflict-checked undo. Other component themes remain
-discovery-only. See WALLPAPER.md for capability and validation limits. Connecting and
+Managed integrations cover the detected terminals, bars, launchers, notifications,
+shells, GTK/Qt files and native GNOME/Xfce preferences, each with its own scope.
+Wallpaper changes use automatically selected, session-specific adapters with
+reviewed application and conflict-checked undo. Swaybg can instead configure the
+next manual Sway reload without replacing a running process. See INTEGRATIONS.md
+and WALLPAPER.md for capability and validation limits. Connecting and
 disconnecting an integration are both reviewed, reversible changes.
 
 Discovery must not alter desktop settings. Applying a plan changes only the
@@ -67,12 +70,12 @@ session reload is included. Probing never changes the wallpaper.
 
 ## Next outcomes
 
-1. Extend terminal support (Alacritty and foot) and named profile composition.
-2. Connect launchers, notifications and bars to the same palette.
+1. Add named profile composition and verification in real application sessions.
+2. Expand conservative configuration parsing and application-specific style coverage.
 3. Extend wallpaper coverage to additional protocols and session versions,
    retaining restorable state and conflict checks.
-4. Add environment-specific GTK, GNOME, KDE Plasma and Xfce integrations,
-   with individual capability and validation records.
+4. Extend environment-specific GTK, GNOME, KDE Plasma and Xfce capabilities,
+   preserving individual capability and validation records.
 5. Add explicit, reviewable dependency installation only when useful.
 
 Each delivery must preserve user configuration, test failure/conflict recovery

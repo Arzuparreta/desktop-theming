@@ -284,7 +284,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.stat().st_mode & 0o777, 0o400)
 
     def test_invalid_resolution_options_are_rejected(self):
-        for value in ([], {"i3": {}}, {"kitty": {"replace_colors": "yes"}},
+        for value in ([], {"unknown-component": {}}, {"kitty": {"replace_colors": "yes"}},
                       {"kitty": {"symlink": "follow"}}, {"kitty": {"unknown": True}}):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 service.validate_profile(dict(self.profile, resolutions=value))

@@ -10,15 +10,21 @@ def isolated_environment(*, x11=False):
     root = Path(temporary.name)
     binaries = root / "bin"
     binaries.mkdir()
-    kitty = binaries / "kitty"
-    kitty.write_text("#!/bin/sh\nexit 0\n")
-    kitty.chmod(0o700)
+    from . import integrations, inventory
+
+    for component in inventory.COMPONENTS:
+        if component[0] not in set(integrations.FILES) | {"kitty"}:
+            continue
+        for command in component[3]:
+            stub = binaries / command
+            stub.write_text("#!/bin/sh\nprintf 'foot version: 1.28.0\\n'\n" if command == "foot" else "#!/bin/sh\nexit 0\n")
+            stub.chmod(0o700)
     os.environ.update(HOME=str(root), XDG_CONFIG_HOME=str(root / "config"),
                       XDG_DATA_HOME=str(root / "data"),
                       XDG_STATE_HOME=str(root / "state"), XDG_CACHE_HOME=str(root / "cache"),
                       XDG_RUNTIME_DIR=str(root / "runtime"), PATH=str(binaries),
                       QT_QPA_PLATFORM="xcb" if x11 else "offscreen",
-                      QT_QUICK_BACKEND="rhi" if x11 else "software")
+                      QT_QUICK_BACKEND="rhi" if x11 else "software", ZDOTDIR="")
     if x11:
         os.environ["QSG_RHI_BACKEND"] = "opengl"
     (root / "runtime").mkdir(mode=0o700)
@@ -36,6 +42,37 @@ def isolated_environment(*, x11=False):
         Image.new("RGB", (120, 80), "#95a78d").save(images / name)
     (images / "notes.txt").write_text("Not an image")
     return temporary
+
+
+def exercise_integrations(paths):
+    """Every new file adapter must also work from the frozen payload."""
+    from . import changes, integrations, inventory, service, theme
+
+    polybar = paths.config / "polybar/config.ini"
+    polybar.parent.mkdir(parents=True, exist_ok=True)
+    original = "[bar/test]\nmodules-left=clock\n[module/clock]\ntype=internal/date\n"
+    polybar.write_text(original)
+    profile = dict(service.DEFAULT_PROFILE, components=sorted(integrations.FILES),
+                   mode="safe", wallpaper=str(paths.home / "images #1/a #1.png"))
+    initial = service.apply_reviewed(paths, service.make_plan(paths, profile))
+    if not all(inventory.managed(paths, component) for component in integrations.FILES):
+        raise ValueError("Bundled file adapter ownership is incomplete")
+    if service.make_plan(paths, profile)["changes"]:
+        raise ValueError("Bundled file adapters are not idempotent")
+    for component in integrations.FILES:
+        if not theme.render(component, theme.palette(profile)):
+            raise ValueError("Bundled theme export is empty")
+    update = dict(profile, polarity="light")
+    updated = service.apply_reviewed(paths, service.make_plan(paths, update))
+    changes.undo(paths, updated["id"], reviewed=changes.review_undo(paths, updated["id"]))
+    disconnected = service.apply_reviewed(paths, service.make_plan(paths, service.DEFAULT_PROFILE))
+    if polybar.read_text() != original:
+        raise ValueError("Bundled adapter disconnection lost original preferences")
+    changes.undo(paths, disconnected["id"])
+    changes.undo(paths, initial["id"])
+    if paths.profile.exists() or any(paths.ownership(c).exists() for c in integrations.FILES):
+        raise ValueError("Bundled adapter undo did not restore initial state")
+    print(f"PASS: {len(integrations.FILES)} native file adapters compose, apply, update, export, disconnect and undo in isolated HOME/XDG.")
 
 
 def exercise(app, engine, controller):
@@ -116,6 +153,7 @@ def exercise(app, engine, controller):
                     raise ValueError("Standalone export failed")
                 if not engine.rootObjects():
                     raise ValueError("QML window is missing")
+                exercise_integrations(controller.paths)
                 print("PASS: QML, image/folder dialogs, thumbnails, guided connection, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
                 timer.stop()
                 app.exit(0)

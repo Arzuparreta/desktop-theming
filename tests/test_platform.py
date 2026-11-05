@@ -270,7 +270,7 @@ class PlatformTests(unittest.TestCase):
             self.plan()
 
     def test_invalid_profiles_do_not_overwrite_existing_file(self):
-        for profile in ([], {"components": "kitty"}, {"components": ["i3"]},
+        for profile in ([], {"components": "kitty"}, {"components": ["unknown-component"]},
                         {"components": ["kitty", "kitty"]}, {"polarity": "blue"}):
             with self.subTest(profile=profile), self.assertRaises(ValueError):
                 service.validate_profile(profile)
