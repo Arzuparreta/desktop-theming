@@ -9,6 +9,8 @@ use History to review and restore an earlier background.
 The active session selects the adapter, not the presence of an installed package.
 Probes only query settings and live IPC endpoints. They never install software,
 start a daemon, restart applications or invoke legacy walltheme apply hooks.
+System tools run with the host's library paths; the AppImage's private OpenSSL
+and Qt/QML paths are not passed to them. Their stderr appears in failure details.
 Desktop owners take precedence over generic X11/Wayland tools. An unavailable
 GNOME API, for example, cannot fall back to setting an invisible X11 root image.
 On standalone Wayland sessions, awww, then swww, then compatible Hyprland
@@ -61,12 +63,16 @@ the setter; these APIs do not provide atomic compare-and-set.
 
 ## Validation and protocol references
 
-Automated tests use disposable HOME/XDG trees and mocked desktop commands. They
+Unit tests use disposable HOME/XDG trees and mocked desktop commands. They
 cover adapter selection, read-only review, multiple outputs, light/dark variants,
 stale sessions/images/settings, failures, partial recovery, ordered feh undo,
 symlink preservation and conflict rejection. They do not establish verification
 on every desktop version or real compositor. Real-session checks must be done
-by explicitly applying a reviewed plan on a test desktop, never as part of tests.
+by explicitly applying a reviewed plan on a test desktop. The bundled
+`--smoke-test-wallpaper` diagnostic additionally runs real feh/xprop and the
+reviewed apply, undo and failure rollback against its own private Xvfb with
+temporary HOME/XDG directories. It never sets wallpaper on the caller's display.
+`--smoke-test-feh` only decodes a temporary image with host feh and needs no Xvfb.
 
 Protocol references: [Plasma scripting API](https://develop.kde.org/docs/plasma/scripting/api/),
 [swww source and manuals](https://github.com/LGFae/swww),
