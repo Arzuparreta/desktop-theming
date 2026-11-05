@@ -17,5 +17,10 @@ Read `docs/DIRECTION.md` before choosing product scope or architecture.
 - Run `python3 -m unittest discover -s tests -v`, `ruff check desktop_theming
   tests`, and `bash -n install.sh` for changes to the new platform.
 
+- Rebuild the local AppImage whenever changes affect its bundled code, UI,
+  resources or packaging. Run its `--smoke-test` in isolated HOME/XDG directories
+  and refresh the artifact checksum before handing back; do not leave the user
+  testing an older AppImage.
+
 - Commit and push completed repository changes to GitHub before ending a turn.
   Report failed checks or pushes explicitly; never force-push.
