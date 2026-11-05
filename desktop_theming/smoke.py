@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 
-def isolated_environment():
+def isolated_environment(*, x11=False):
     temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-smoke-")
     root = Path(temporary.name)
     binaries = root / "bin"
@@ -14,9 +14,13 @@ def isolated_environment():
     kitty.write_text("#!/bin/sh\nexit 0\n")
     kitty.chmod(0o700)
     os.environ.update(HOME=str(root), XDG_CONFIG_HOME=str(root / "config"),
+                      XDG_DATA_HOME=str(root / "data"),
                       XDG_STATE_HOME=str(root / "state"), XDG_CACHE_HOME=str(root / "cache"),
                       XDG_RUNTIME_DIR=str(root / "runtime"), PATH=str(binaries),
-                      QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
+                      QT_QPA_PLATFORM="xcb" if x11 else "offscreen",
+                      QT_QUICK_BACKEND="rhi" if x11 else "software")
+    if x11:
+        os.environ["QSG_RHI_BACKEND"] = "opengl"
     (root / "runtime").mkdir(mode=0o700)
     original = root / "dotfiles/kitty.conf"
     original.parent.mkdir()

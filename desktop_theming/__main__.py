@@ -5,12 +5,13 @@ from pathlib import Path
 
 
 def main():
-    diagnostic = "--smoke-test" in sys.argv[1:]
+    graphics_diagnostic = "--smoke-test-x11" in sys.argv[1:]
+    diagnostic = "--smoke-test" in sys.argv[1:] or graphics_diagnostic
     temporary = None
     if diagnostic:
         from .smoke import isolated_environment
 
-        temporary = isolated_environment()
+        temporary = isolated_environment(x11=graphics_diagnostic)
 
     try:
         from PySide6.QtCore import QUrl
