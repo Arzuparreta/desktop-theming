@@ -66,7 +66,7 @@ The original 0.1.0 release bundles Ubuntu 22.04's `libstdc++`. On newer systems
 this can produce `GLIBCXX_3.4.32 not found` while loading a host graphics driver,
 followed by `Could not initialize GLX`. The file can have correct permissions and
 a matching checksum and still fail to open. Local builds can work because they
-bundle a newer runtime. The packaging fix above applies to subsequent builds;
+bundle a newer runtime. The packaging fix above is included in 0.1.1 and later;
 published 0.1.0 assets remain unchanged.
 
 On x86_64 Arch/CachyOS, a temporary workaround for that original release is:
@@ -95,11 +95,13 @@ To cut a release:
 1. Update `desktop_theming.__version__` if necessary, run the required checks,
    and commit and push all completed changes to `main`.
 2. Fetch GitHub's current `main` and launch:
-   `gh workflow run appimage.yml --ref main -f version=0.1.0`
+   `gh workflow run appimage.yml --ref main -f version=0.1.1`
    (replace the version with the source version).
 3. Wait for the workflow to finish. Verify the public release tag resolves to
    the built source commit, download both assets, check the SHA-256 and run
    `APPIMAGE_EXTRACT_AND_RUN=1 ./DesktopTheming-x86_64.AppImage --smoke-test`.
+   With an accessible X11 display, also run `--smoke-test-x11` on the downloaded
+   asset to verify host graphics initialization.
 4. Report the public release URL and verification results.
 
 The workflow rejects dispatches from other branches, version mismatches and
