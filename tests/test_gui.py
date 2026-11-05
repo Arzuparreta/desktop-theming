@@ -116,6 +116,7 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.paths.profile.exists())
 
     def test_initial_discovery_preview_and_qml_are_read_only(self):
+        self.assertTrue(self.control("setDesktopWallpaper").property("checked"))
         self.assertFalse(self.paths.config.exists())
         self.assertFalse(self.paths.state.exists())
         self.assertEqual(self.controller.state["profile"]["components"], [])
@@ -314,6 +315,102 @@ class GuiTests(unittest.TestCase):
         self.click("approveChanges")
         self.assertFalse(self.controller.state["error"])
         self.assertEqual(changes.history(self.paths)[0]["status"], "undone")
+
+    def choose_folder(self, folder, count):
+        self.controller.chooseFolder(QUrl.fromLocalFile(str(folder)).toString())
+        self.settle()
+        self.assertFalse(self.controller.state["error"])
+        self.assertEqual(len(self.controller.imageFolder["images"]), count)
+        self.assertEqual(self.control("wallpaperImageList").property("count"), count)
+
+    def test_folder_images_stay_visible_and_selection_respects_wallpaper_opt_out(self):
+        from PIL import Image
+
+        folder = self.root / "images #1"
+        folder.mkdir()
+        for name in ("a #1.png", "b.JPG", "c.webp"):
+            Image.new("RGB", (120, 80), "#95a78d").save(folder / name)
+        (folder / "notes.txt").write_text("not an image")
+        (folder / "nested.png").mkdir()
+        self.choose_folder(folder, 3)
+        self.assertTrue(self.control("setDesktopWallpaper").property("checked"))
+        self.assertFalse(self.controller.state["profile"]["wallpaper"])
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
+        self.click("wallpaper-row-0")
+        self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "a #1.png"))
+        self.assertTrue(self.controller.state["profile"]["set_wallpaper"])
+        self.click("setDesktopWallpaper")
+        self.click("wallpaper-row-1")
+        self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "b.JPG"))
+        self.assertFalse(self.controller.state["profile"]["set_wallpaper"])
+        self.assertTrue(self.control("wallpaperImageList").property("visible"))
+        self.assertEqual(self.control("wallpaperImageList").property("count"), 3)
+        for width, height in ((1080, 780), (760, 600)):
+            self.window.setWidth(width)
+            self.window.setHeight(height)
+            self.app.processEvents()
+            row = self.control("wallpaper-row-0")
+            self.assertGreater(row.width(), 250)
+            self.assertLess(row.mapToScene(row.boundingRect().bottomRight()).x(), width)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
+        self.assertEqual(self.messages, [])
+
+    def test_empty_folder_and_switching_to_another_folder(self):
+        from PIL import Image
+
+        empty = self.root / "empty"
+        empty.mkdir()
+        self.choose_folder(empty, 0)
+        other = self.root / "other"
+        other.mkdir()
+        Image.new("RGB", (8, 8), "#224466").save(other / "image.png")
+        self.choose_folder(other, 1)
+        self.assertFalse(self.controller.state["profile"]["wallpaper"])
+        self.assertEqual(self.messages, [])
+
+    def test_folder_keyboard_selection_and_scroll_survive_preview_and_refresh(self):
+        from PIL import Image
+
+        folder = self.root / "many images"
+        folder.mkdir()
+        for index in range(24):
+            Image.new("RGB", (16, 16), "#95a78d").save(folder / f"{index:02}.pNg")
+        self.choose_folder(folder, 24)
+        listing = self.control("wallpaperImageList")
+        listing.forceActiveFocus()
+        listing.setProperty("currentIndex", 0)
+        QTest.keyClick(self.window, Qt.Key_Down)
+        QTest.keyClick(self.window, Qt.Key_Return)
+        self.settle()
+        self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "01.pNg"))
+        listing.setProperty("currentIndex", 20)
+        self.app.processEvents()
+        listing.setProperty("contentY", 900.0)
+        position = listing.property("contentY")
+        self.controller.chooseWallpaper(QUrl.fromLocalFile(str(folder / "20.pNg")).toString())
+        self.settle()
+        self.assertEqual(listing.property("contentY"), position)
+        self.controller.refresh()
+        self.settle()
+        self.assertEqual(listing.property("contentY"), position)
+        self.assertEqual(listing.property("count"), 24)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
+        self.assertEqual(self.messages, [])
+
+    def test_unreadable_folder_reports_error_and_keeps_previous_list(self):
+        folder = self.root / "empty"
+        folder.mkdir()
+        self.choose_folder(folder, 0)
+        self.controller.chooseFolder(QUrl.fromLocalFile(str(folder / "missing")).toString())
+        self.settle()
+        self.assertTrue(self.controller.state["error"])
+        self.assertEqual(self.controller.state["problem"]["action"], "folder")
+        self.assertEqual(self.controller.imageFolder["path"], str(folder))
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
 
     def test_wallpaper_url_and_preview_handle_spaces_and_hashes(self):
         from PIL import Image

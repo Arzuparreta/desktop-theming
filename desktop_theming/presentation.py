@@ -95,6 +95,9 @@ def describe_file(paths, item):
 
 
 def problem(context, detail):
+    if context == "folder":
+        return {"title": "Cannot read this image folder", "body": "Choose another folder or check its permissions.",
+                "action": "folder", "label": "Choose folder…"}
     if context == "preview":
         return {"title": "The palette could not be previewed", "body": "Choose another image or clear it to use the default palette.",
                 "action": "image", "label": "Choose another image…"}

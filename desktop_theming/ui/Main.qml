@@ -7,6 +7,8 @@ ApplicationWindow {
     id: window
     required property QtObject controller
     readonly property var s: controller.state
+    readonly property var imageFolder: controller.imageFolder
+    readonly property int folderImageCount: imageList.count
     property int page: 0
     property var inspected: ({})
     property int diffIndex: 0
@@ -38,6 +40,8 @@ ApplicationWindow {
 
     function openWallpaperPicker() { wallpaperPicker.open() }
     function closeWallpaperPicker() { wallpaperPicker.close() }
+    function openFolderPicker() { folderPicker.open() }
+    function closeFolderPicker() { folderPicker.close() }
     function selected(id) { return s.profile.components.indexOf(id) >= 0 }
     function evidence(c) {
         return (c.installed === null ? "Availability unknown" : c.installed ? "Available" : "Not found")
@@ -66,6 +70,7 @@ ApplicationWindow {
     function handleProblem() {
         switch (s.problem.action) {
         case "image": wallpaperPicker.open(); break
+        case "folder": folderPicker.open(); break
         case "save": exportPicker.open(); break
         case "review": controller.review(); break
         case "history": page = 2; break
@@ -91,6 +96,13 @@ ApplicationWindow {
         title: "Choose an image for the palette"
         nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)", "All files (*)"]
         onAccepted: controller.chooseWallpaper(selectedFile.toString())
+    }
+    FolderDialog {
+        id: folderPicker
+        objectName: "wallpaperFolderPicker"
+        options: FolderDialog.DontUseNativeDialog
+        title: "Choose a folder of images"
+        onAccepted: controller.chooseFolder(selectedFolder.toString())
     }
     FileDialog {
         id: exportPicker
@@ -156,124 +168,255 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            ScrollView {
-                clip: true
-                contentWidth: availableWidth
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 22
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 28
-                        ColumnLayout {
-                            Layout.preferredWidth: 290
-                            Layout.maximumWidth: 330
-                            Layout.alignment: Qt.AlignTop
-                            spacing: 18
-                            Label { text: "A palette for your desktop"; font.pixelSize: 19; color: "#e7e7eb" }
-                            Body { Layout.fillWidth: true; text: "Choose colors, then select the applications to theme." }
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: 160
-                                radius: 8
-                                color: "#111318"
-                                clip: true
-                                Image {
-                                    anchors.fill: parent
-                                    source: s.wallpaperUrl
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
-                                    autoTransform: true
-                                    sourceSize.width: 660
-                                }
-                                Body { anchors.centerIn: parent; visible: !s.profile.wallpaper; text: "No image selected" }
-                            }
-                            RowLayout {
-                                Command { text: "Choose image…"; enabled: !s.busy && s.loaded; onClicked: wallpaperPicker.open() }
-                                Command { visible: !!s.profile.wallpaper; text: "Clear"; quiet: true; enabled: !s.busy; onClicked: controller.setOption("wallpaper", "") }
-                            }
-                            Body { Layout.fillWidth: true; visible: !!s.profile.wallpaper; text: s.profile.wallpaper; font.pixelSize: 11 }
-                            CheckBox {
-                                text: "Set as desktop wallpaper"
-                                checked: !!s.profile.set_wallpaper
-                                enabled: !s.busy && s.loaded && !!s.profile.wallpaper
-                                onToggled: controller.setWallpaperEnabled(checked)
-                            }
-                            Body { Layout.fillWidth: true; text: "Your desktop is detected automatically when reviewing changes. No wallpaper changes happen until you approve."; font.pixelSize: 12 }
-                            Body { text: "Appearance"; color: "#e7e7eb" }
-                            RowLayout {
-                                Repeater {
-                                    model: ["dark", "light"]
-                                    Command { required property string modelData; text: modelData === "dark" ? "Dark" : "Light"; primary: s.profile.polarity === modelData; enabled: !s.busy && s.loaded; onClicked: controller.setOption("polarity", modelData) }
-                                }
-                            }
-                            Body { text: "Palette"; color: "#e7e7eb" }
-                            RowLayout {
-                                Repeater {
-                                    model: ["adaptive", "safe"]
-                                    Command { required property string modelData; text: modelData === "adaptive" ? "From image" : "Default colors"; primary: (s.profile.wallpaper ? s.profile.mode : "safe") === modelData; enabled: !s.busy && s.loaded && (modelData !== "adaptive" || !!s.profile.wallpaper); onClicked: controller.setOption("mode", modelData) }
-                                }
-                            }
-                            Body { Layout.fillWidth: true; text: !s.profile.wallpaper ? "Default colors are shown until you choose an image." : preview.reason || "Colors are checked for terminal contrast and distinction."; font.pixelSize: 12 }
-                        }
-                        ColumnLayout {
+            RowLayout {
+                spacing: 24
+                ScrollView {
+                    id: sourceScroll
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 460
+                    Layout.minimumWidth: 330
+                    Layout.fillHeight: true
+                    clip: true
+                    contentWidth: availableWidth
+                    ColumnLayout {
+                        width: sourceScroll.availableWidth
+                        spacing: 12
+                        Label { text: "A palette for your desktop"; font.pixelSize: 19; color: "#e7e7eb" }
+                        Body { visible: !imageFolder.path; Layout.fillWidth: true; text: "Choose colors, then select the applications to theme." }
+                        Rectangle {
                             Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignTop
-                            spacing: 16
-                            RowLayout {
-                                Body { text: "Terminal preview"; color: "#e7e7eb" }
-                                Item { Layout.fillWidth: true }
-                                Body { text: preview.effective ? (preview.effective === "safe" ? "Default colors" : "Image colors") + " / " + (preview.polarity === "light" ? "Light" : "Dark") : ""; font.pixelSize: 11 }
+                            visible: !imageFolder.path
+                            implicitHeight: 132
+                            radius: 8
+                            color: "#111318"
+                            clip: true
+                            Image {
+                                anchors.fill: parent
+                                source: s.wallpaperUrl
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                autoTransform: true
+                                sourceSize.width: 660
+                            }
+                            Body { anchors.centerIn: parent; visible: !s.profile.wallpaper; text: "No image selected" }
+                        }
+                        RowLayout {
+                            Command { objectName: "chooseImage"; text: "Image…"; enabled: !s.busy && s.loaded; onClicked: wallpaperPicker.open() }
+                            Command { objectName: "chooseFolder"; text: "Folder…"; enabled: !s.busy && s.loaded; onClicked: folderPicker.open() }
+                            Command { visible: !!s.profile.wallpaper; text: "Clear"; quiet: true; enabled: !s.busy; onClicked: controller.setOption("wallpaper", "") }
+                        }
+                        CheckBox {
+                            objectName: "setDesktopWallpaper"
+                            text: "Set as desktop wallpaper"
+                            checked: !!s.profile.set_wallpaper
+                            enabled: !s.busy && s.loaded && !!s.profile.wallpaper
+                            onToggled: controller.setWallpaperEnabled(checked)
+                            Accessible.description: "Wallpaper changes require review and approval"
+                        }
+                        Body { visible: !imageFolder.path; Layout.fillWidth: true; text: "Wallpaper changes require review and approval."; font.pixelSize: 12 }
+                        ColumnLayout {
+                            visible: !!imageFolder.path
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Body { Layout.fillWidth: true; text: "Folder images · " + folderImageCount; color: "#e7e7eb" }
+                            Label {
+                                Layout.fillWidth: true
+                                text: imageFolder.path
+                                textFormat: Text.PlainText
+                                elide: Text.ElideMiddle
+                                color: "#b9bbc4"
+                                font.pixelSize: 11
+                                Accessible.name: "Image folder: " + text
+                                HoverHandler { id: folderHover }
+                                ToolTip.visible: folderHover.hovered
+                                ToolTip.text: text
                             }
                             Rectangle {
                                 Layout.fillWidth: true
-                                implicitHeight: 310
-                                radius: 8
-                                color: special.background
+                                implicitHeight: Math.max(120, sourceScroll.availableHeight - 195)
+                                color: "#111318"
                                 border.color: "#3c3e45"
-                                ColumnLayout {
+                                radius: 6
+                                ListView {
+                                    id: imageList
+                                    objectName: "wallpaperImageList"
                                     anchors.fill: parent
-                                    anchors.margins: 24
-                                    spacing: 16
-                                    Label { text: "~/projects"; font.family: "monospace"; font.pixelSize: 12; color: special.foreground; opacity: 0.65 }
-                                    Label { text: "❯ git status"; font.family: "monospace"; font.pixelSize: 14; color: special.foreground }
-                                    Label { text: "On branch main"; font.family: "monospace"; font.pixelSize: 13; color: special.foreground }
-                                    Label { text: "  modified:  colors.conf"; font.family: "monospace"; font.pixelSize: 13; color: colors.color3 || "#d7bc82" }
-                                    Label { text: "  added:     theme.conf"; font.family: "monospace"; font.pixelSize: 13; color: colors.color2 || "#99bd98" }
-                                    RowLayout {
-                                        Label { text: "❯"; font.family: "monospace"; font.pixelSize: 14; color: colors.color4 || "#9babcc" }
-                                        Rectangle { width: 8; height: 17; color: special.cursor }
-                                        Item { Layout.fillWidth: true }
-                                    }
-                                    Item { Layout.fillHeight: true }
-                                }
-                            }
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: 8
-                                columnSpacing: 7
-                                rowSpacing: 7
-                                Repeater {
-                                    model: 16
-                                    Rectangle {
+                                    anchors.margins: 4
+                                    clip: true
+                                    model: imageFolder.images
+                                    spacing: 3
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                    Accessible.name: "Images in selected folder"
+                                    Accessible.role: Accessible.List
+                                    keyNavigationEnabled: true
+                                    activeFocusOnTab: true
+                                    Keys.onReturnPressed: if (currentItem && !s.busy) currentItem.clicked()
+                                    Keys.onSpacePressed: if (currentItem && !s.busy) currentItem.clicked()
+                                    delegate: ItemDelegate {
+                                        id: imageRow
+                                        objectName: "wallpaper-row-" + index
                                         required property int index
-                                        Layout.fillWidth: true
-                                        implicitHeight: 30
-                                        radius: 4
-                                        color: colors["color" + index] || "#36383f"
-                                        border.color: "#555761"
-                                        Accessible.name: "ANSI " + index + ": " + color
-                                        HoverHandler { id: swatchHover }
-                                        ToolTip.visible: swatchHover.hovered
-                                        ToolTip.text: "ANSI " + index + " · " + color
+                                        required property var modelData
+                                        width: imageList.width - 14
+                                        height: 58
+                                        highlighted: s.profile.wallpaper === modelData.filePath
+                                        enabled: !s.busy && s.loaded
+                                        activeFocusOnTab: false
+                                        Accessible.name: modelData.fileName
+                                        Accessible.role: Accessible.ListItem
+                                        Accessible.selected: highlighted
+                                        Accessible.description: highlighted ? "Selected palette image" : "Choose this image for the palette"
+                                        onClicked: { imageList.currentIndex = index; controller.chooseWallpaper(modelData.fileUrl) }
+                                        Keys.onReturnPressed: clicked()
+                                        contentItem: RowLayout {
+                                            spacing: 10
+                                            Rectangle {
+                                                Layout.preferredWidth: 68
+                                                Layout.preferredHeight: 46
+                                                color: "#25272d"
+                                                Image {
+                                                    objectName: "wallpaper-thumbnail-" + imageRow.index
+                                                    anchors.fill: parent
+                                                    source: imageRow.modelData.fileUrl
+                                                    sourceSize.width: 136
+                                                    sourceSize.height: 92
+                                                    fillMode: Image.PreserveAspectFit
+                                                    asynchronous: true
+                                                    autoTransform: true
+                                                    cache: false
+                                                }
+                                            }
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: imageRow.modelData.fileName
+                                                textFormat: Text.PlainText
+                                                elide: Text.ElideMiddle
+                                                color: "#e7e7eb"
+                                            }
+                                            Label { visible: imageRow.highlighted; text: "✓"; color: "#cad8cb" }
+                                        }
+                                        background: Rectangle {
+                                            radius: 4
+                                            color: imageRow.highlighted ? "#303d35" : imageRow.hovered ? "#292c33" : "transparent"
+                                            border.width: (imageRow.activeFocus || (imageList.activeFocus && imageList.currentIndex === imageRow.index)) ? 2 : 1
+                                            border.color: (imageRow.activeFocus || (imageList.activeFocus && imageList.currentIndex === imageRow.index)) ? "#cad8cb" : imageRow.highlighted ? "#78977d" : "transparent"
+                                        }
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: modelData.fileName
+                                    }
+                                    Body {
+                                        anchors.centerIn: parent
+                                        width: parent.width - 24
+                                        visible: folderImageCount === 0
+                                        text: "No supported images found. Choose another folder or check its permissions."
                                     }
                                 }
                             }
-                            Body { Layout.fillWidth: true; text: "Preview only. Your wallpaper and running applications stay as they are."; font.pixelSize: 12 }
-                            RowLayout {
-                                Command { text: "Export theme…"; quiet: true; enabled: !s.busy && !!preview.special; onClicked: { exportDialog.open() } }
-                                Item { Layout.fillWidth: true }
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            visible: !!s.profile.wallpaper && !imageFolder.path
+                            text: s.profile.wallpaper
+                            textFormat: Text.PlainText
+                            elide: Text.ElideMiddle
+                            color: "#b9bbc4"
+                            font.pixelSize: 11
+                            Accessible.name: "Selected image: " + text
+                            HoverHandler { id: selectedImageHover }
+                            ToolTip.visible: selectedImageHover.hovered
+                            ToolTip.text: text
+                        }
+                    }
+                }
+                ScrollView {
+                    id: previewScroll
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 400
+                    Layout.minimumWidth: 310
+                    Layout.fillHeight: true
+                    clip: true
+                    contentWidth: availableWidth
+                    ColumnLayout {
+                        width: previewScroll.availableWidth
+                        spacing: 12
+                        RowLayout {
+                            Body { text: "Terminal preview"; color: "#e7e7eb" }
+                            Item { Layout.fillWidth: true }
+                            Body { text: preview.effective ? (preview.effective === "safe" ? "Default colors" : "Image colors") + " / " + (preview.polarity === "light" ? "Light" : "Dark") : ""; font.pixelSize: 11 }
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: terminalContent.implicitHeight + 24
+                            radius: 8
+                            color: special.background
+                            border.color: "#3c3e45"
+                            ColumnLayout {
+                                id: terminalContent
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 6
+                                Label { text: "~/projects"; font.family: "monospace"; font.pixelSize: 12; color: special.foreground; opacity: 0.65 }
+                                Label { text: "❯ git status"; font.family: "monospace"; font.pixelSize: 14; color: special.foreground }
+                                Label { text: "On branch main"; font.family: "monospace"; font.pixelSize: 13; color: special.foreground }
+                                Label { text: "  modified:  colors.conf"; font.family: "monospace"; font.pixelSize: 13; color: colors.color3 || "#d7bc82" }
+                                Label { text: "  added:     theme.conf"; font.family: "monospace"; font.pixelSize: 13; color: colors.color2 || "#99bd98" }
+                                RowLayout {
+                                    Label { text: "❯"; font.family: "monospace"; font.pixelSize: 14; color: colors.color4 || "#9babcc" }
+                                    Rectangle { width: 8; height: 17; color: special.cursor }
+                                    Item { Layout.fillWidth: true }
+                                }
                             }
+                        }
+                        GridLayout {
+                            Layout.alignment: Qt.AlignLeft
+                            columns: 8
+                            columnSpacing: 7
+                            rowSpacing: 7
+                            Repeater {
+                                model: 16
+                                Rectangle {
+                                    required property int index
+                                    implicitWidth: 28
+                                    implicitHeight: 28
+                                    radius: 4
+                                    color: colors["color" + index] || "#36383f"
+                                    border.color: "#555761"
+                                    Accessible.name: "ANSI " + index + ": " + color
+                                    HoverHandler { id: swatchHover }
+                                    ToolTip.visible: swatchHover.hovered
+                                    ToolTip.text: "ANSI " + index + " · " + color
+                                }
+                            }
+                        }
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: previewScroll.availableWidth >= 410 ? 2 : 1
+                            columnSpacing: 16
+                            rowSpacing: 10
+                            ColumnLayout {
+                                Body { text: "Appearance"; color: "#e7e7eb" }
+                                RowLayout {
+                                    Repeater {
+                                        model: ["dark", "light"]
+                                        Command { required property string modelData; text: modelData === "dark" ? "Dark" : "Light"; primary: s.profile.polarity === modelData; enabled: !s.busy && s.loaded; onClicked: controller.setOption("polarity", modelData) }
+                                    }
+                                }
+                            }
+                            ColumnLayout {
+                                Body { text: "Palette"; color: "#e7e7eb" }
+                                RowLayout {
+                                    Repeater {
+                                        model: ["adaptive", "safe"]
+                                        Command { required property string modelData; text: modelData === "adaptive" ? "From image" : "Default colors"; primary: (s.profile.wallpaper ? s.profile.mode : "safe") === modelData; enabled: !s.busy && s.loaded && (modelData !== "adaptive" || !!s.profile.wallpaper); onClicked: controller.setOption("mode", modelData) }
+                                    }
+                                }
+                            }
+                        }
+                        Body { Layout.fillWidth: true; text: !s.profile.wallpaper ? "Default colors are shown until you choose an image." : preview.reason || "Colors are checked for terminal contrast and distinction."; font.pixelSize: 12 }
+                        RowLayout {
+                            Command { text: "Export theme…"; quiet: true; enabled: !s.busy && !!preview.special; onClicked: { exportDialog.open() } }
+                            Item { Layout.fillWidth: true }
                         }
                     }
                 }
