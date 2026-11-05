@@ -45,7 +45,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             libegl1 libopengl0 libgl1-mesa-dri xvfb xauth \
-            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxkbcommon-x11-0
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0
       - name: Prepare isolated build tools
         run: |
           python -m venv .venv
@@ -67,7 +67,10 @@ jobs:
       - name: Check host graphics runtime compatibility
         run: |
           test ! -e dist/desktop-theming/_internal/libstdc++.so.6
-          APPIMAGE_EXTRACT_AND_RUN=1 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a dist/DesktopTheming-x86_64.AppImage --smoke-test-x11
+          APPIMAGE_EXTRACT_AND_RUN=1 LIBGL_ALWAYS_SOFTWARE=1 QT_DEBUG_PLUGINS=1 \
+            xvfb-run -a dist/DesktopTheming-x86_64.AppImage --smoke-test-x11 > "$RUNNER_TEMP/x11-smoke.log" 2>&1 \
+            || { cat "$RUNNER_TEMP/x11-smoke.log"; exit 1; }
+          grep '^PASS:' "$RUNNER_TEMP/x11-smoke.log"
       - name: Exercise bundled QML and engine in temporary HOME/XDG
         run: |
           APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
