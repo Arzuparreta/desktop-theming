@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from . import changes, inventory
+from . import appearance, changes, integrations, inventory
 
 
 def connection(paths, component):
-    """Explain decisions before selecting a terminal. Never grants permission."""
+    """Explain decisions before selecting an integration. Never grants permission."""
     if component not in inventory.SUPPORTED:
         raise ValueError("This application does not support theme changes yet.")
     found = inventory.discover(paths)
@@ -17,20 +17,21 @@ def connection(paths, component):
     linked_folder = False
     try:
         target = inventory.config_target(paths, component)
-        path = str(target)
-        changes.safe_parents(target, paths.config)
+        if component not in appearance.COMPONENTS:
+            path = str(target)
+        changes.safe_parents(target, changes.config_root(paths, target))
     except (OSError, ValueError) as exc:
         issues.append(str(exc))
         linked_folder = "Directory is a symlink" in str(exc)
-    if not item["installed"]:
+    if item["installed"] is False:
         issues.insert(0, f"{item['name']} was not found on your executable search path.")
     if report.get("managed_block") and not report.get("ownership_record"):
         issues.append("This file contains an earlier integration without its restoration record.")
-    linked = report.get("kind") == "symlink"
+    linked = report.get("kind") == "symlink" or bool(report.get("linked_paths"))
     target = report.get("link_target", "")
     if linked and target and not Path(target).is_absolute():
         target = str(Path(path).parent / target)
-    if not item["installed"]:
+    if item["installed"] is False:
         explanation = f"{item['name']} could not be found. Install it separately before using this integration."
     elif linked_folder:
         explanation = "The configuration folder links to another location. This version cannot safely manage linked folders."
@@ -39,12 +40,14 @@ def connection(paths, component):
     elif any("mixes colors" in issue for issue in issues):
         explanation = "An included file mixes colors with other preferences. This version cannot safely separate them."
     else:
-        explanation = "Some configuration could not be read or safely understood. The current files will be preserved."
+        explanation = " ".join(issues) if issues else ""
     return {"id": component, "name": item["name"], "path": path,
             "linked": linked, "target": target,
             "existingColors": bool(report.get("has_existing_colors")) and not item["managed"],
             "issues": list(dict.fromkeys(issues)), "blocked": bool(issues), "explanation": explanation if issues else "",
-            "sources": report.get("sources", [])}
+            "sources": report.get("sources", []), "capability": item["capability"],
+            "canExport": component not in appearance.COMPONENTS,
+            "native": component in appearance.COMPONENTS, "imageOnly": component == "swaybg"}
 
 
 def needs_decision(info, profile):
@@ -60,25 +63,32 @@ def review_summary(paths, plan, previous):
     source = "the default palette" if palette["effective"] == "safe" else "the selected image's palette"
     result = [f"Apply {source} with a {palette['polarity']} background."]
     for ident in sorted(selected | old):
-        name = "Kitty" if ident == "kitty" else "Ghostty"
+        name = next(c[1] for c in inventory.COMPONENTS if c[0] == ident)
         if ident not in selected:
             result.append(f"Stop managing {name}'s colors and restore its previous color configuration.")
         else:
-            result.append(f"Use this palette in {name}. Keep its other preferences.")
+            if ident == "swaybg":
+                result.append("Configure the selected background image for the next manual Sway reload.")
+            elif ident in appearance.COMPONENTS:
+                result.append(f"Use the reviewed native appearance preferences in {name}.")
+            else:
+                result.append(f"Use this palette in {name}. Keep its other preferences.")
+            if ident in integrations.CAPABILITIES:
+                result.append(integrations.CAPABILITIES[ident])
         item = next((c for c in plan["changes"]
                      if c["path"] == str(inventory.config_target(paths, ident))), None)
         if item and item["before"]["kind"] == "symlink":
             result.append(f"Give {name} a separate local configuration. The linked original stays unchanged; "
-                          "future edits to that original will no longer reach this terminal.")
+                          "future edits to that original will no longer reach this application.")
         if plan.get("configuration", {}).get(ident, {}).get("has_existing_colors"):
             result.append(f"Replace {name}'s existing color settings. Included source files stay unchanged.")
     if not selected and not old:
         result.append("Save this palette for later. No applications will be themed.")
     elif selected:
-        result.append("Reopen the selected terminal or use its reload action to see the new colors.")
+        result.append("Reopen applications or use their own reload actions where needed. Native desktop preferences may take effect immediately.")
     if plan.get("wallpaper_action"):
         result.append("Set the selected image as your desktop wallpaper. Previous backgrounds are kept for undo.")
-    if not plan["changes"] and not plan.get("wallpaper_action"):
+    if not plan["changes"] and not plan.get("wallpaper_action") and not plan.get("settings_actions"):
         return ["Everything already matches these choices. There is nothing to apply."]
     return result
 

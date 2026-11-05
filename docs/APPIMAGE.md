@@ -130,7 +130,7 @@ To cut a release:
 1. Update `desktop_theming.__version__` if necessary, run the required checks,
    and commit and push all completed changes to `main`.
 2. Fetch GitHub's current `main` and launch:
-   `gh workflow run appimage.yml --ref main -f version=0.1.2`
+   `gh workflow run appimage.yml --ref main -f version=0.2.0`
    (replace the version with the source version).
 3. Wait for the workflow to finish. Verify the public release tag resolves to
    the built source commit, download both assets, check the SHA-256 and run

@@ -117,10 +117,13 @@ jobs:
           FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
           The accompanying .sha256 file verifies the download.
 
-          Wallpaper previews now use a responsive 16:9 canvas with Fit and Fill
-          controls, preserving image proportions across window sizes. The selected
-          image remains previewable when browsing a folder. Preview controls do
-          not change desktop wallpaper placement.
+          Managed integrations now cover Alacritty, foot, i3, Sway, Hyprland,
+          KDE application colors, Polybar, Waybar, Rofi, Wofi, Dunst, Mako,
+          GTK 3, GTK 4, qt5ct/qt6ct, zsh and fish, alongside Kitty and Ghostty.
+          Native GNOME mode/accent and Xfce installed light/dark counterparts
+          use reviewed preferences with rollback, disconnect and undo.
+          Swaybg has a Sway background configuration workflow for the next
+          manual reload, without replacing a running process.
 
           Graphics startup uses the host C++ runtime, fixing the Mesa/GLX failure
           caused by the older runtime bundled in 0.1.0. Qt X11 dependencies are
@@ -130,9 +133,13 @@ jobs:
           OpenSSL/Qt paths. This fixes feh failures when applying wallpaper on newer
           systems. Real feh apply, undo and failure rollback are tested on a private Xvfb.
 
-          Kitty and Ghostty themes and supported desktop wallpaper adapters can apply
-          reviewed changes. Other theme integrations are discovery-only.
-          See docs/APPIMAGE.md and docs/WALLPAPER.md for compatibility limits.
+          Existing preferences are preserved within each adapter's documented
+          scope. Exact changes require review; later edits block overwrites.
+          Nothing installs packages, signals applications or invokes legacy hooks.
+          The bundled diagnostic exercises all eighteen new file adapters.
+          See docs/INTEGRATIONS.md, docs/APPIMAGE.md and docs/WALLPAPER.md for
+          capability, native syntax, activation and validation limits. Native
+          preference tests simulate protocols; every real desktop is not verified.
           EOF
           gh release create "v$RELEASE_VERSION" \
             --target "$SOURCE_SHA" --title "Desktop Theming $RELEASE_VERSION" \
