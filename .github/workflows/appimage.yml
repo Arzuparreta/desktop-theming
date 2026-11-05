@@ -114,6 +114,10 @@ jobs:
           FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
           The accompanying .sha256 file verifies the download.
 
+          Graphics startup uses the host C++ runtime, fixing the Mesa/GLX failure
+          caused by the older runtime bundled in 0.1.0. Qt X11 dependencies are
+          included; both X11/OpenGL and offscreen diagnostics run before publication.
+
           Kitty and Ghostty themes and supported desktop wallpaper adapters can apply
           reviewed changes. Other theme integrations are discovery-only.
           See docs/APPIMAGE.md and docs/WALLPAPER.md for compatibility limits.
