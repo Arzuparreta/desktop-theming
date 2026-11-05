@@ -1,11 +1,10 @@
 import json
-import re
 from pathlib import Path
 
-from . import changes, inventory, theme
+from . import changes, configuration, inventory, ownership, theme
 
 DEFAULT_PROFILE = {"version": 1, "components": [], "wallpaper": "",
-                   "mode": "adaptive", "polarity": "dark"}
+                   "mode": "adaptive", "polarity": "dark", "resolutions": {}}
 
 
 def validate_profile(value):
@@ -21,6 +20,14 @@ def validate_profile(value):
         raise ValueError("Select only supported components: kitty, ghostty.")
     if result["mode"] not in ("adaptive", "safe") or result["polarity"] not in ("dark", "light"):
         raise ValueError("Invalid theme mode or polarity.")
+    resolutions = result["resolutions"]
+    if not isinstance(resolutions, dict) or not set(resolutions) <= inventory.SUPPORTED:
+        raise ValueError("Invalid component resolutions.")
+    for options in resolutions.values():
+        if (not isinstance(options, dict) or set(options) - {"replace_colors", "symlink"}
+                or not isinstance(options.get("replace_colors", False), bool)
+                or options.get("symlink", "preserve") not in ("preserve", "detach")):
+            raise ValueError("Use replace_colors boolean and symlink preserve/detach resolutions.")
     image = result["wallpaper"]
     if not isinstance(image, str) or any(c in image for c in "\r\n\0"):
         raise ValueError("Invalid wallpaper path.")
@@ -40,16 +47,7 @@ def load_profile(paths):
 
 
 def detach(text, component):
-    # Never guess what a partial or repeated ownership block means.
-    if text.count(inventory.START) != text.count(inventory.END) or text.count(inventory.START) > 1:
-        raise ValueError(f"Malformed desktop-theming block in {component} config.")
-    if inventory.START in text:
-        pattern = re.compile(r"(?m)^" + re.escape(inventory.START) + r"\n.*?^"
-                             + re.escape(inventory.END) + r"\n?", re.DOTALL)
-        text, count = pattern.subn("", text)
-        if count != 1:
-            raise ValueError(f"Malformed desktop-theming block in {component} config.")
-    return text
+    return configuration.split_block(text)[0]
 
 
 def attach(text, component, output):
@@ -66,6 +64,11 @@ def attach(text, component, output):
 
 
 def make_plan(paths, profile, *, which=None):
+    pending = [item for item in changes.history(paths) if item["status"] in
+               ("prepared", "recovery-needed", "undoing")]
+    if pending:
+        raise ValueError("An interrupted transaction needs recovery. "
+                         f"Recover transaction {pending[0]['id']} from change history before applying again.")
     profile = validate_profile(profile)
     previous = load_profile(paths)
     removed = set(previous["components"]) - set(profile["components"])
@@ -76,33 +79,76 @@ def make_plan(paths, profile, *, which=None):
             raise ValueError(f"{component} is not on PATH. Install it explicitly before "
                              "selecting this integration; no packages have been installed.")
     value = theme.palette(profile)
-    proposed, warnings = [], []
-    for component in sorted(removed):
+    proposed, warnings, inputs, inspections = [], [], [], {}
+
+    def propose(path, content):
+        item = changes.change(path, content, paths.config)
+        if item:
+            proposed.append(item)
+
+    for component in sorted(removed | set(profile["components"])):
         config = inventory.config_target(paths, component)
         current = changes.snapshot(config)
+        record = ownership.load(paths, component)
+        if component in previous["components"] and record is None:
+            raise ValueError(f"{component} has a saved selection without an ownership record. "
+                             "Undo its earlier transaction or resolve the old integration manually; "
+                             "existing configuration will not be adopted automatically.")
+        if record is not None and component not in previous["components"]:
+            raise ValueError(f"Orphan ownership record for {component}; resolve it before planning.")
+        if component in removed:
+            after = ownership.disconnect(paths, component, record, config, current)
+            if after["kind"] == "symlink":
+                target = Path(after["target"])
+                if not target.is_absolute():
+                    target = config.parent / target
+                inputs.append({"path": str(target), "fingerprint": changes.digest(changes.snapshot(target))})
+            item = changes.replacement(config, after, paths.config)
+            if item:
+                proposed.append(item)
+            propose(paths.theme(component), None)
+            propose(paths.ownership(component), None)
+            warnings.append(f"Disconnect {component}: restore previous color configuration; "
+                            "original theme source files are never rewritten.")
+            continue
         text = changes.text_of(current)
-        if inventory.START not in text:
-            raise ValueError(f"The managed block is missing from {config}. "
-                             "Restore it or undo the earlier transaction before disconnecting.")
-        for path, content in ((config, detach(text, component)),
-                              (paths.theme(component), None)):
-            item = changes.change(path, content, paths.config)
-            if item:
-                proposed.append(item)
-        warnings.append(f"Disconnect {component}: remove only the Desktop Theming include "
-                        "and generated theme. Other configuration is preserved.")
-    for component in profile["components"]:
+        if record:
+            text = ownership.verify(paths, component, record, config, current)
+        elif inventory.START in text or inventory.END in text:
+            configuration.split_block(text)  # Give malformed blocks a precise error.
+            raise ValueError(f"Unowned managed block in {config}; resolve it or undo before connecting.")
+        options = profile["resolutions"].get(component, {})
+        if current["kind"] == "symlink" and options.get("symlink") != "detach":
+            raise ValueError(f"{config} is a symlink. Preserve your dotfiles using theme export, "
+                             "or explicitly choose symlink=detach before reviewing a local copy.")
+        report = configuration.inspect(paths, component, config, text=text)
+        inspections[component] = report
+        inputs.extend(report["inputs"])
+        # Once owned, newly added color sources are conflicts, not fresh permission
+        # to overwrite manual changes with a previously saved takeover option.
+        base = configuration.prepare(text, report,
+                                     replace_colors=not record and options.get("replace_colors", False))
         output = paths.theme(component)
-        config = inventory.config_target(paths, component)
-        current = changes.snapshot(config)
-        modified = attach(changes.text_of(current), component, output)
-        for path, content in ((output, theme.render(component, value)), (config, modified)):
-            item = changes.change(path, content, paths.config)
-            if item:
-                proposed.append(item)
-                if item["detach_symlink"]:
-                    warnings.append(f"{path}: replace the symlink with a private file; "
-                                    "the original target is untouched and undo restores the link.")
+        if not record and (output.exists() or output.is_symlink()):
+            raise ValueError(f"Unowned generated theme exists: {output}. Preserve or move it first.")
+        modified = attach(base, component, output)
+        rendered = theme.render(component, value)
+        if record is None:
+            record = {"version": 1, "component": component, "path": str(config),
+                      "original": current, "base": configuration.split_block(modified)[0],
+                      "config_mode": current.get("mode", 0o600),
+                      "replaced_colors": report["has_existing_colors"]}
+        record = dict(record, block=configuration.split_block(modified)[1],
+                      theme=changes.text_snapshot(rendered, record.get("theme", {}).get("mode", 0o600)))
+        propose(output, rendered)
+        propose(config, modified)
+        propose(paths.ownership(component), json.dumps(record, indent=2) + "\n")
+        if current["kind"] == "symlink":
+            warnings.append(f"{config}: detach symlink into an independent local file. "
+                            "It will stop following the repository; the original target is untouched.")
+        if report["has_existing_colors"]:
+            warnings.append(f"{component}: replace the reviewed direct colors/color-only includes. "
+                            "Their source files remain unchanged; disconnection retains restoration data.")
     profile_change = changes.change(paths.profile, json.dumps(profile, indent=2) + "\n", paths.config)
     if profile_change:
         proposed.append(profile_change)
@@ -111,7 +157,8 @@ def make_plan(paths, profile, *, which=None):
     if value["reason"]:
         warnings.append(value["reason"])
     payload = {"version": 1, "profile": profile, "palette": value,
-               "changes": proposed, "warnings": warnings}
+               "changes": proposed, "warnings": warnings, "inputs": inputs,
+               "configuration": inspections}
     return dict(payload, id=changes.digest(payload))
 
 
@@ -119,7 +166,10 @@ def apply_reviewed(paths, plan, *, which=None):
     if not isinstance(plan, dict) or "profile" not in plan or "id" not in plan:
         raise ValueError("Invalid plan. Generate and review a fresh plan.")
     # Regenerate rather than trusting arbitrary serialized file operations.
-    fresh = make_plan(paths, plan["profile"], which=which)
+    try:
+        fresh = make_plan(paths, plan["profile"], which=which)
+    except (ValueError, OSError) as exc:
+        raise ValueError(f"The reviewed plan is stale: {exc}") from exc
     if plan["id"] != fresh["id"] or plan != fresh:
         raise ValueError("The reviewed plan is stale or has changed. Review a fresh plan.")
     return changes.apply(paths, fresh)

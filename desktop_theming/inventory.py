@@ -5,6 +5,8 @@ import os
 import shutil
 from pathlib import Path
 
+from . import changes, configuration, ownership
+
 # id, name, category, executables, process names, config paths
 COMPONENTS = (
     ("kitty", "kitty", "Terminal", ("kitty",), ("kitty",), ("kitty/kitty.conf",)),
@@ -91,12 +93,14 @@ def config_target(paths, component):
 
 def managed(paths, component):
     try:
-        text = config_target(paths, component).read_text()
-        theme = paths.theme(component)
-        directive = (f"include {theme}" if component == "kitty" else
-                     f"config-file = {theme}")
-        return f"{START}\n{directive}\n{END}" in text and theme.is_file()
-    except (OSError, ValueError):
+        record = ownership.load(paths, component)
+        if not record:
+            return False
+        config = config_target(paths, component)
+        ownership.verify(paths, component, record, config, changes.snapshot(config))
+        report = configuration.inspect(paths, component, config)
+        return not report["issues"] and not report["has_existing_colors"]
+    except (OSError, ValueError, UnicodeError):
         return False
 
 
@@ -128,9 +132,19 @@ def discover(paths, *, running=None, which=None, environ=None):
                 "executables": binaries,
                 "running": bool(set(process_names) & running),
                 "configs": [{"path": str(file), "exists": file.exists(),
-                             "symlink": file.is_symlink()} for file in files],
+                             "symlink": file.is_symlink(),
+                             "target": str(file.readlink()) if file.is_symlink() else None} for file in files],
                 "supported": ident in SUPPORTED,
                 "managed": managed(paths, ident) if ident in SUPPORTED else False}
+        if ident in SUPPORTED:
+            try:
+                item["configuration"] = configuration.inspect(paths, ident, config_target(paths, ident))
+                item["configuration"]["ownership_record"] = paths.ownership(ident).exists()
+                if item["configuration"]["ownership_record"] and not item["managed"]:
+                    item["configuration"]["issues"].append(
+                        "Ownership exists but managed configuration has drifted; resolve before applying.")
+            except (OSError, ValueError) as exc:
+                item["configuration"] = {"issues": [str(exc)], "sources": []}
         if category == "Session":
             aliases = {"plasma": {"kde", "plasma"}, "xfce": {"xfce", "xfce4"}}
             item["current_session"] = bool(set(desktop) & aliases.get(ident, {ident}))
