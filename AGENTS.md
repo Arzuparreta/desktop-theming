@@ -16,10 +16,3 @@ Read `docs/DIRECTION.md` before choosing product scope or architecture.
 - Document which integrations are discovery-only and which can apply themes.
 - Run `python3 -m unittest discover -s tests -v`, `ruff check desktop_theming
   tests`, and `bash -n install.sh` for changes to the new platform.
-
-## Delivery
-
-- Push completed, validated work unless the user explicitly asks for local-only work.
-- For substantial changes, use a dedicated branch and open a pull request with
-  the final scope, validation evidence and remaining limitations.
-- Opening a pull request does not authorize merging it.
