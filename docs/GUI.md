@@ -28,30 +28,43 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
 ## Workflows
 
 - **Appearance:** choose an image as a color source, select dark/light and
-  adaptive/safe colors, and inspect the terminal sample and all sixteen ANSI
+  image-derived/default colors, and inspect the terminal sample and all sixteen ANSI
   colors. This does not replace the desktop wallpaper. Preview failures are
   visible; fallback palettes include the engine's explanation.
-- **Components:** inspect executable availability, user processes, active-session
-  evidence, conventional config files, existing color directives/includes and
-  unresolved issues. These are separate from selection and managed file state.
-  Only Kitty and Ghostty can be connected. Other integrations are discovery-only.
-- **Existing colors:** inspect a terminal, explicitly choose color replacement
-  and, where applicable, detachment of a config symlink into a local file.
-  Included files and symlink targets are preserved. Unresolved mixed/dynamic
-  includes block application; standalone export remains available.
-- **Review:** select each changed file to read its full diff, including file type,
-  permissions, link targets, generated themes, ownership records and profile.
-  Apply authorizes precisely that plan. Later config/source changes invalidate
-  approval. Cancel and Escape leave the desktop untouched.
-- **Disconnect:** uncheck a connected terminal, review and apply. Its previous
-  color configuration is restored while unrelated preferences are preserved.
+- **Components:** select **Use palette** beside Kitty or Ghostty. The application
+  checks the current configuration first. A linked config or existing colors
+  opens an explanation immediately, with separate, initially unchecked choices
+  for creating a local copy and replacing colors. Continue only after consenting
+  to every required change. Cancel leaves selection and files unchanged.
+- **Configuration details:** the optional **Details…** view is read-only. It shows
+  executable availability, user processes, active-session evidence, config files,
+  color directives/includes and unresolved issues. Required choices never live
+  here. Other components say **Detection only** and cannot be selected for themes.
+  Unavailable detection-only components are hidden until **Show all checked
+  components** is selected; supported terminals remain visible even if missing.
+- **Unsupported configurations:** linked configuration folders, mixed/dynamic
+  includes and ownership conflicts are explained before selection, without
+  bypassing engine checks. Export remains available and explicitly does not
+  connect the terminal; manual inclusion is still necessary for an exported file.
+- **Review:** begins with a plain-language summary: palette, affected terminals,
+  preserved preferences, link consequences and how to see the colors. Each file
+  has a readable label, full path and full selectable diff, including type,
+  permissions, links, generated themes, restoration data and profile. Additional
+  engine notes are optional. Apply authorizes only the exact reviewed plan.
+  Changes found between selection and review return to the required decisions;
+  changes after review invalidate approval. Cancel and Escape do not apply.
+- **Disconnect:** clear **Use palette**, review and apply. The row explains that
+  previous colors will be restored. Selection is separate from configured files
+  and from the appearance of a running terminal.
 - **History:** the latest active transaction offers reviewed undo or recovery.
   Review shows the exact remaining reverse changes. Later edits and journal
   changes invalidate approval; conflicts are displayed without overwriting them.
+  Interrupted transactions also show a direct recovery action above the main view.
 - **Export:** choose Kitty or Ghostty, inspect the generated theme, copy it or
   save a new file. Saving refuses existing files and symlinks; select a new name.
 
-Ctrl+Enter opens review; Ctrl+R refreshes inventory and discards pending choices.
+Ctrl+Enter opens review. **Check desktop** and Ctrl+R rescan inventory while
+keeping pending palette and application choices.
 Buttons are disabled during serialized background work. Closing waits until the
 current operation finishes. No application is signalled or restarted; use the
 terminal's own reload action or reopen it after applying.
@@ -69,9 +82,11 @@ bash -n install.sh scripts/build-appimage.sh
 Qt tests run offscreen with software rendering and disposable HOME/XDG roots.
 They exercise actual window approval buttons, read-only discovery/preview,
 connection, disconnection, undo, interrupted recovery, stale review rejection,
-explicit color/link choices and safe standalone exports. The bundled smoke test
-always replaces HOME/XDG/PATH with a temporary fixture before creating Qt. It
-loads the actual QML and exercises the engine without using the real desktop.
+immediately visible color/link decisions, cancellation without consent, linked
+folder blocking, refresh without lost choices and safe standalone exports.
+The bundled smoke test always replaces HOME/XDG/PATH with a temporary fixture before creating Qt. It
+loads the actual QML and exercises guided connection from a linked configuration,
+review, apply, link restoration and export without using the real desktop.
 
 Offscreen checks do not establish appearance in a real Kitty/Ghostty process,
 Wayland/X11 compositor integration, screen-reader behavior or distribution-wide

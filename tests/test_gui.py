@@ -80,8 +80,26 @@ class GuiTests(unittest.TestCase):
         self.app.processEvents()
         QTest.qWait(30)
 
+    def control(self, name):
+        # Repeater delegates can have a visual parent distinct from QObject ownership.
+        pending = [self.window, self.window.contentItem()]
+        seen = {}
+        while pending:
+            item = pending.pop()
+            if id(item) in seen:
+                continue
+            seen[id(item)] = item
+            if item.objectName() == name:
+                return item
+            pending.extend(item.children())
+            if hasattr(item, "childItems"):
+                pending.extend(item.childItems())
+        return None
+
     def click(self, name):
-        item = self.window.findChild(QObject, name)
+        self.app.processEvents()
+        QTest.qWait(40)
+        item = self.control(name)
         self.assertIsNotNone(item, name)
         point = item.mapToScene(item.boundingRect().center())
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, QPoint(round(point.x()), round(point.y())))
@@ -141,28 +159,108 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.paths.profile.exists())
         self.assertFalse(self.controller.state["review"])
 
-    def test_existing_colors_and_symlink_need_explicit_choices(self):
+    def linked_config(self):
         config = self.paths.config / "kitty/kitty.conf"
-        config.parent.mkdir(parents=True)
+        config.parent.mkdir(parents=True, exist_ok=True)
         target = self.root / "dotfiles.conf"
-        target.write_text("background #101010\nfont_size 15\n")
+        target.write_text("font_size 15\n" + "".join(f"color{i} #101010\n" for i in range(16)))
         config.symlink_to(target)
+        return config, target
+
+    def test_link_and_existing_colors_are_explained_when_selecting_from_the_list(self):
+        config, target = self.linked_config()
+        original = target.read_bytes()
         self.controller.refresh()
+        self.settle()
+        self.window.setProperty("page", 1)
+        self.click("connect-kitty")
+        self.assertTrue(self.controller.state["connection"]["linked"])
+        self.assertTrue(self.controller.state["connection"]["existingColors"])
+        self.assertEqual(self.controller.state["profile"]["components"], [])
+        self.assertFalse(self.controller.state["error"])
+        approve = self.window.findChild(QObject, "confirmConnection")
+        self.assertFalse(approve.property("enabled"))
+        # Required decisions must be visible without opening Details or scrolling.
+        for name in ("allowLocalCopy", "allowReplaceColors", "confirmConnection"):
+            control = self.window.findChild(QObject, name)
+            position = control.mapToScene(control.boundingRect().center())
+            self.assertTrue(control.property("visible"), name)
+            self.assertGreater(position.y(), 0, name)
+            self.assertLess(position.y(), self.window.height(), name)
+        self.click("allowLocalCopy")
+        self.assertFalse(approve.property("enabled"))
+        self.click("allowReplaceColors")
+        self.click("confirmConnection")
+        self.assertFalse(self.controller.state["connection"])
+        self.assertTrue(config.is_symlink())
+        self.assertEqual(target.read_bytes(), original)
+        self.assertFalse(self.paths.profile.exists())
+        self.click("reviewChanges")
+        summary = " ".join(self.controller.state["review"]["summary"])
+        self.assertIn("future edits", summary)
+        self.assertIn("other preferences", summary)
+        self.click("approveChanges")
+        self.assertFalse(config.is_symlink())
+        self.assertEqual(target.read_bytes(), original)
+        self.assertIn("font_size 15", config.read_text())
+        self.assertEqual(self.messages, [])
+
+    def test_cancel_link_decision_preserves_unselected_state_and_link(self):
+        config, target = self.linked_config()
+        self.window.setProperty("page", 1)
+        self.click("connect-kitty")
+        self.click("allowLocalCopy")
+        self.click("cancelConnection")
+        self.assertEqual(self.controller.state["profile"]["components"], [])
+        self.assertEqual(self.controller.state["profile"]["resolutions"], {})
+        self.assertFalse(self.controller.state["connection"])
+        self.assertFalse(self.control("connect-kitty").property("checked"))
+        self.assertTrue(config.is_symlink())
+        self.assertFalse(self.paths.profile.exists())
+        self.assertFalse(self.paths.state.exists())
+
+    def test_review_routes_a_new_link_to_decisions_instead_of_an_error(self):
+        self.controller.selectComponent("kitty", True)
+        self.settle()
+        config, target = self.linked_config()
+        self.click("reviewChanges")
+        self.assertTrue(self.controller.state["connection"]["continueReview"])
+        self.assertFalse(self.controller.state["error"])
+        self.click("allowLocalCopy")
+        self.click("allowReplaceColors")
+        self.click("confirmConnection")
+        self.assertTrue(self.controller.state["review"])
+        self.assertTrue(config.is_symlink())
+        self.assertFalse(self.paths.profile.exists())
+
+    def test_linked_folder_explains_block_and_offers_export_without_selection(self):
+        folder = self.root / "dotfiles"
+        folder.mkdir()
+        (folder / "kitty.conf").write_text("font_size 15\n")
+        self.paths.config.mkdir()
+        (self.paths.config / "kitty").symlink_to(folder, target_is_directory=True)
+        self.window.setProperty("page", 1)
+        self.click("connect-kitty")
+        self.assertTrue(self.controller.state["connection"]["blocked"])
+        self.assertEqual(self.controller.state["profile"]["components"], [])
+        self.assertFalse(self.window.findChild(QObject, "confirmConnection").property("visible"))
+        self.click("connectionExport")
+        self.assertTrue(self.controller.state["exportText"])
+        self.assertFalse(self.paths.profile.exists())
+        self.assertEqual((folder / "kitty.conf").read_text(), "font_size 15\n")
+        self.assertEqual(self.messages, [])
+
+    def test_refresh_keeps_pending_palette_and_application_choices(self):
+        self.controller.setOption("polarity", "light")
         self.settle()
         self.controller.selectComponent("kitty", True)
         self.settle()
-        self.click("reviewChanges")
-        self.assertTrue(self.controller.state["error"])
-        self.controller.resolve("kitty", "symlink", True)
+        draft = dict(self.controller.state["profile"])
+        self.controller.refresh()
         self.settle()
-        self.controller.resolve("kitty", "replace_colors", True)
-        self.settle()
-        self.click("reviewChanges")
-        self.assertFalse(self.controller.state["error"])
-        self.click("approveChanges")
-        self.assertFalse(config.is_symlink())
-        self.assertEqual(target.read_text(), "background #101010\nfont_size 15\n")
-        self.assertIn("font_size 15", config.read_text())
+        self.assertEqual(self.controller.state["profile"], draft)
+        self.assertIn("Pending choices kept", self.controller.state["notice"])
+        self.assertFalse(self.paths.profile.exists())
 
     def test_export_creates_only_chosen_new_file_and_preserves_links(self):
         self.controller.renderExport("ghostty")
@@ -229,3 +327,15 @@ class GuiTests(unittest.TestCase):
         self.assertIn("%23", self.controller.state["wallpaperUrl"])
         self.assertFalse(self.paths.config.exists())
         self.assertEqual(self.messages, [])
+
+    def test_cancelling_connection_after_a_palette_edit_resumes_preview(self):
+        self.linked_config()
+        self.controller.setOption("polarity", "light")
+        self.controller.selectComponent("kitty", True)
+        self.settle()
+        self.assertTrue(self.controller.state["connection"])
+        self.controller.cancelConnection()
+        self.settle()
+        self.assertEqual(self.controller.state["palette"]["polarity"], "light")
+        self.assertEqual(self.controller.state["profile"]["components"], [])
+        self.assertFalse(self.paths.profile.exists())

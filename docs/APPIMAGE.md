@@ -25,7 +25,8 @@ scripts/build-appimage.sh
 The script requires an explicitly supplied tool and type-2 runtime and never downloads or installs
 anything. CI downloads appimagetool 1.9.1 and checks its SHA-256 before executing
 it, and pins the runtime by SHA-256 as well. See `.github/workflows/appimage.yml` for the exact asset and digest. Builds
-write only to this checkout's ignored `build/` and `dist/` directories.
+write only to this checkout's ignored `build/` and `dist/` directories. The final
+AppImage is published by rename so running copies retain their original payload.
 
 PyInstaller builds a relocatable **one-directory** payload. Appimagetool wraps
 that directory once, avoiding a second self-extracting Python archive. The custom
