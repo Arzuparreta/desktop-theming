@@ -43,16 +43,17 @@ the rest of my desktop alone."
 
 ## Current foundation and next interface
 
-The current checkout provides a Python engine for read-only inventory, explicit
-component selection, palette preview, exact change plans, application, undo and
-recovery. There is no GUI, HTTP server, application launcher, configuration CLI
-or MCP implementation. GUI toolkit, layout and visual design remain open.
+The current checkout provides a Qt Quick / PySide6 GUI over a Python engine for
+read-only inventory, explicit component selection, palette preview, exact change
+plans, application, export, undo and recovery.
+There is no HTTP server, configuration CLI or MCP implementation.
+The source launcher and AppImage packaging keep the engine local.
 
-The next interface is a GUI over the engine. It must expose existing color
+The GUI over the engine exposes existing color
 sources, unresolved issues, explicit color replacement and symlink handling,
-exact file changes, approval, disconnection and recovery. No user should need a
-terminal command to finish those workflows. A future MCP interface and small
-fallback CLI for agents will use the same engine.
+exact file changes, approval, disconnection and recovery. No user needs a terminal
+command to finish those workflows. A future MCP interface and small fallback CLI
+for agents will use the same engine.
 
 Kitty and Ghostty are the first managed integrations. Other components are
 reported as discovery-only, not advertised as fully supported. Connecting and

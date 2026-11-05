@@ -1,5 +1,4 @@
 import copy
-import json
 import os
 import tempfile
 import unittest
@@ -8,6 +7,7 @@ from unittest.mock import patch
 
 from desktop_theming import changes, inventory, service, theme
 from desktop_theming.paths import Paths
+
 
 class PlatformTests(unittest.TestCase):
     def setUp(self):

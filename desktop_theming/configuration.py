@@ -11,15 +11,19 @@ from . import changes
 
 START = "# BEGIN desktop-theming"
 END = "# END desktop-theming"
-KITTY_COLORS = set("background foreground cursor cursor_text_color selection_background "
-                   "selection_foreground url_color active_border_color inactive_border_color "
-                   "bell_border_color active_tab_background active_tab_foreground "
-                   "inactive_tab_background inactive_tab_foreground tab_bar_background "
-                   "tab_bar_margin_color mark1_foreground mark1_background mark2_foreground "
-                   "mark2_background mark3_foreground mark3_background visual_bell_color".split())
+KITTY_COLORS = {
+    "background", "foreground", "cursor", "cursor_text_color", "selection_background",
+    "selection_foreground", "url_color", "active_border_color", "inactive_border_color",
+    "bell_border_color", "active_tab_background", "active_tab_foreground",
+    "inactive_tab_background", "inactive_tab_foreground", "tab_bar_background",
+    "tab_bar_margin_color", "mark1_foreground", "mark1_background", "mark2_foreground",
+    "mark2_background", "mark3_foreground", "mark3_background", "visual_bell_color",
+}
 KITTY_COLORS.update(f"color{i}" for i in range(256))
-GHOSTTY_COLORS = set("background foreground palette cursor-color cursor-text "
-                     "selection-background selection-foreground".split())
+GHOSTTY_COLORS = {
+    "background", "foreground", "palette", "cursor-color", "cursor-text",
+    "selection-background", "selection-foreground",
+}
 
 
 def split_block(text):

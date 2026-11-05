@@ -1,0 +1,46 @@
+name: AppImage
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare isolated build tools
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-build.txt ruff
+      - name: Test GUI and engine offscreen
+        run: |
+          .venv/bin/python -m unittest discover -s tests -v
+          .venv/bin/ruff check desktop_theming tests
+          bash -n install.sh scripts/build-appimage.sh
+      - name: Fetch pinned appimagetool
+        run: |
+          curl --fail --location --output "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          curl --fail --location --output "$RUNNER_TEMP/appimage-runtime" https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
+          echo "617aa77314d57c8b8e4fae9c3f0b35af7b30d5529cb69e98f64f92510ed98a46  $RUNNER_TEMP/appimage-runtime" | sha256sum --check
+      - name: Build AppImage
+        run: APPIMAGETOOL="$RUNNER_TEMP/appimagetool" APPIMAGE_RUNTIME="$RUNNER_TEMP/appimage-runtime" scripts/build-appimage.sh
+      - name: Exercise bundled QML and engine in temporary HOME/XDG
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
+          cd dist
+          sha256sum DesktopTheming-x86_64.AppImage > DesktopTheming-x86_64.AppImage.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DesktopTheming-x86_64
+          path: |
+            dist/DesktopTheming-x86_64.AppImage
+            dist/DesktopTheming-x86_64.AppImage.sha256

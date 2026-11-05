@@ -1,12 +1,15 @@
 # Development and validation
 
-The platform currently consists of a Python 3.11+ engine. Pillow is required
-only for palette generation. There are no GUI assets, HTTP server, application
-launcher, frontend build or configuration CLI. GUI technology and design are
-open; MCP and a small fallback CLI for agents are future adapters.
+The platform has a Python 3.11+ engine and a PySide6 / Qt Quick GUI.
+Pillow provides palette analysis. Qt remains optional for engine-only use.
+See [GUI workflows](GUI.md) and [AppImage packaging](APPIMAGE.md).
+MCP and a small fallback CLI for agents are future adapters.
 
 ## Layout
 
+- `desktop_theming/gui.py`, `__main__.py`, `ui/`: asynchronous Qt adapter, launcher and QML.
+- `desktop_theming/smoke.py`: bundled diagnostic using a temporary HOME/XDG/PATH.
+- `packaging/`, `scripts/build-appimage.sh`: relocatable payload and AppImage build.
 - `desktop_theming/inventory.py`: read-only component and session discovery.
 - `desktop_theming/configuration.py`: conservative color/include inspection without evaluation.
 - `desktop_theming/ownership.py`: persistent ownership checks and disconnection restoration.
@@ -15,14 +18,14 @@ open; MCP and a small fallback CLI for agents are future adapters.
 - `desktop_theming/changes.py`: conflict checks, file replacement and undo journals.
 - `desktop_theming/paths.py`: HOME/XDG data locations.
 - `bin/walltheme`, `config/`, `scripts/install-thinkpad.sh`: original legacy workflow.
-- `install.sh`, `scripts/install-platform.py`: refuse normal installation while no
-  application exists; legacy installation requires an explicit `--thinkpad` choice.
+- `install.sh`, `scripts/install-platform.py`: describe GUI launch options and refuse automatic installation;
+  legacy installation requires an explicit `--thinkpad` choice.
 
 The palette engine is reused without calling its application hooks. The new
 platform does not invoke pywal, change the wallpaper, write GTK settings or
 signal applications. Adding an adapter must preserve these boundaries.
 
-## Service boundary for a future interface
+## Service boundary
 
 | Operation | Python entry point | Effect |
 |---|---|---|
@@ -34,7 +37,8 @@ signal applications. Adding an adapter must preserve these boundaries.
 | Apply reviewed changes | `service.apply_reviewed(paths, plan)` | Regenerates/validates the exact reviewed plan, then writes a transaction |
 | Disconnect | Plan a profile without the component, then apply it | Reviewed restoration/removal |
 | History | `changes.history(paths)` | Read-only transaction summaries |
-| Undo | `changes.undo(paths, transaction_id)` | Restores the latest active transaction, rejecting conflicts |
+| Review undo/recovery | `changes.review_undo(paths, transaction_id, recover=False)` | Read-only exact reverse diffs |
+| Undo | `changes.undo(paths, transaction_id, reviewed=plan)` | Restores the latest active transaction, rejecting conflicts |
 | Recover | `changes.undo(paths, transaction_id, recover=True)` | Recovers the latest interrupted transaction, rejecting conflicts |
 
 These services have no dependency on argument parsing, terminal output or GUI
@@ -42,10 +46,9 @@ rendering. The caller must display the proposed changes and obtain explicit user
 approval before apply, undo or recovery. Application does not trust arbitrary
 serialized file operations: it regenerates the plan and checks its complete data.
 
-For existing manual configuration, the future GUI must expose source evidence,
+For existing manual configuration, the GUI exposes source evidence,
 unresolved issues, explicit color replacement and symlink choices through the
-profile's `resolutions`. See [configuration semantics](CONFIGURATION.md). No
-layout, framework or visual design is specified by the engine.
+profile's `resolutions`. See [configuration semantics](CONFIGURATION.md). The engine is independent of the Qt interface.
 
 ## Tests
 
@@ -63,6 +66,9 @@ undo order, disconnection and normal installation without desktop changes.
 
 ## Support evidence
 
+- Qt interface: offscreen tests exercise window approval buttons and complete isolated workflows;
+  real-session compositor and assistive-technology behavior remain to be verified.
+- AppImage: bundled smoke diagnostic; CI targets Ubuntu 22.04 x86_64, not a verified distribution matrix.
 - Engine discovery, configuration planning and transactions: isolated automated tests.
 - Kitty/Ghostty rendering: palette and configuration tests; rendered appearance and
   reload in a real session remain to be verified.

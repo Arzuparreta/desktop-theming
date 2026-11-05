@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Desktop Theming
+Comment=Compose and review reversible desktop colors
+Exec=desktop-theming
+Icon=desktop-theming
+Categories=Settings;DesktopSettings;
+Terminal=false
+StartupNotify=true

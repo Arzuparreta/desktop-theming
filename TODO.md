@@ -14,7 +14,7 @@ are one historical example, not the architecture or a required desktop stack.
 - [x] Conflict checks, previous file contents, rollback, undo and interrupted recovery.
 - [x] Reviewed disconnection of an integration, independently reversible.
 - [x] HOME/XDG isolation in engine and installer tests.
-- [x] Normal installation refuses changes while no application is provided; legacy requires explicit choice.
+- [x] Source launcher and AppImage packaging; no automatic installation or desktop changes.
 
 - [x] Inspect existing terminal color sources; require explicit replacement and link detachment.
 - [x] Persistent color ownership, conflict detection and restoration on disconnection.
@@ -22,7 +22,7 @@ are one historical example, not the architecture or a required desktop stack.
 
 ## Next complete workflows
 
-- [ ] Build the GUI: inventory, color-source inspection, explicit replacement/link choices,
+- [x] Build the GUI: inventory, color-source inspection, explicit replacement/link choices,
       previews, exact review, approval, standalone export, undo and recovery.
 - [ ] MCP interface for agents, followed by a small fallback CLI over the shared engine.
 
@@ -31,7 +31,8 @@ are one historical example, not the architecture or a required desktop stack.
 - [ ] Verify Ghostty configuration and appearance in a real Ghostty session.
 - [ ] Report applied file state versus running application state; explicit reload actions
       with adapter-specific support, never automatic during discovery or install.
-- [ ] File chooser for wallpaper sources and per-profile wallpaper libraries.
+- [x] File chooser for wallpaper color sources.
+- [ ] Per-profile wallpaper libraries.
 - [ ] Rofi/Wofi and Dunst/Mako palette adapters with interaction-state contrast checks.
 - [ ] Polybar/Waybar adapters that preserve modules, hardware choices and existing styles.
 - [ ] Wallpaper providers: X11 first, then Sway/Hyprland with explicit backend selection.

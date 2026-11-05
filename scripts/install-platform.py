@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Describe the engine-only checkout or explicitly select the legacy installer."""
+"""Describe GUI launch options or explicitly select the legacy installer."""
 
 import argparse
 import os
@@ -25,9 +25,10 @@ def main():
             os.execv("/bin/bash", ["bash", str(repo / "scripts/install-thinkpad.sh")])
         print("No changes. To choose this legacy setup explicitly: ./install.sh --thinkpad --apply")
         return
-    message = "This checkout contains the Python engine only; no application is available to install."
+    message = ("Use the Desktop Theming AppImage, or run .venv/bin/python -m desktop_theming "
+               "after installing requirements-gui.txt in an isolated virtual environment.")
     if args.apply:
-        raise SystemExit(message + " No changes were made.")
+        raise SystemExit(message + " Automatic installation is not provided. No changes were made.")
     print(message)
     print("No changes. The legacy installer requires an explicit --thinkpad choice.")
 
