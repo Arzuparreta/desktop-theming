@@ -260,6 +260,7 @@ ApplicationWindow {
                                         required property var modelData
                                         width: imageList.width - 14
                                         height: 58
+                                        padding: 6
                                         highlighted: s.profile.wallpaper === modelData.filePath
                                         enabled: !s.busy && s.loaded
                                         activeFocusOnTab: false
