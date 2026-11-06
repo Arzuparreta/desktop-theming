@@ -94,25 +94,29 @@ They retain the original file/link, the base configuration after source removal,
 the owned include block and expected generated theme. Keep them as well as history.
 
 Palette updates allow unrelated preferences to change. An edited owned block,
-edited generated theme or newly introduced color source blocks the next update.
-Inspection reports ownership drift instead of claiming the integration is current.
-Changes between review and application, including included files that will not be
-written, invalidate the plan.
+edited generated theme or newly introduced color source is a conflict that pauses
+the next update; inspection names it instead of claiming the integration is
+current. Changes between review and application, including included files that
+will not be written, invalidate the plan.
 
 To disconnect, remove the component from the next reviewed profile. Disconnection
 restores prior color configuration and removes the generated theme and ownership
 record. It restores the original link only if the local configuration and the
-original target still match the recorded state. If prior sources must be restored
-over subsequent local edits, it refuses instead of attempting an ambiguous merge.
-With a regular config and no replaced sources, unrelated preferences can be
-preserved while removing our block. Disconnection is itself a transaction that
-can be undone.
+original target still match the recorded state. Replaced color sources are
+restored with a three-way line merge that keeps later edits elsewhere in the
+file; an edit next to or over those restored lines is a conflict and nothing is
+overwritten. Later permission changes are kept. Disconnection is itself a
+transaction that can be undone.
 
 `changes.undo(paths, transaction_id)` reverses a specific latest transaction,
-including ownership data. It checks complete file snapshots and refuses later
-edits. The same service with `recover=True` handles an interrupted transaction.
-The GUI exposes history and obtains explicit approval before invoking
-undo or recovery. Neither operation guesses how to merge conflicting edits.
+including ownership data. Files still as applied are restored exactly. Files
+edited since then are restored with the same three-way merge as updates, keeping
+edits that do not touch what is being restored; the exact merged result is part
+of the reviewed restoration, and undo writes only that reviewed result. Our
+generated files and link restoration must still match exactly. The same service
+with `recover=True` handles an interrupted transaction. The GUI exposes history
+and obtains explicit approval before invoking undo or recovery. Conflicting edits
+are never merged or overwritten.
 
 Profiles created by the earlier prototype without ownership records are not
 silently adopted. Undo the earlier transaction using its history, or preserve and
@@ -122,8 +126,9 @@ file in our generated-theme path is likewise never overwritten as an unowned fil
 ## Supported inspection boundary
 
 The include-inspection model below is specific to Kitty/Ghostty. New file
-adapters retain complete original/expected snapshots and conservatively block
-any later file edits on update/disconnection. Native GNOME/Xfce preferences join
+adapters retain complete original/expected snapshots, keep later edits to other
+content through update/disconnection/undo and pause on edits to the content they
+manage; see [ownership](INTEGRATIONS.md#ownership-replacement-and-recovery). Native GNOME/Xfce preferences join
 the same review, rollback, undo and recovery journal. Sway/swaybg compose a shared
 file before application. See [the complete integration matrix](INTEGRATIONS.md)
 for supported settings, parsing boundaries, activation and validation evidence.

@@ -300,6 +300,35 @@ class GuiTests(unittest.TestCase):
             self.assertIsInstance(roles, list)
             self.assertEqual(len(roles), 21)
 
+    def test_qt_settings_saves_keep_themes_updatable_and_undoable(self):
+        from PySide6.QtCore import QByteArray
+
+        from desktop_theming import integrations, inventory, service
+
+        paths = Paths(self.root, self.root / 'config #1 "quoted"', self.root / "state")
+        profile = dict(service.DEFAULT_PROFILE, components=["qt"])
+        with patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
+            connected = service.apply_reviewed(paths, service.make_plan(paths, profile))
+            configs = integrations.targets(paths, "qt")
+            for config in configs[:2]:  # What qt5ct/qt6ct do when their window closes.
+                settings = QSettings(str(config), QSettings.IniFormat)
+                settings.setValue("SettingsWindow/geometry", QByteArray(b"\x01\xd9\xd0\xcb\x00\x03"))
+                settings.sync()
+            saved = {config: config.read_text() for config in configs[:2]}
+            self.assertTrue(inventory.managed(paths, "qt"))
+            plan = service.make_plan(paths, dict(profile, polarity="light"))
+            self.assertFalse({str(c) for c in configs[:2]} & {item["path"] for item in plan["changes"]})
+            service.apply_reviewed(paths, plan)
+        self.assertEqual({config: config.read_text() for config in saved}, saved)
+        undo = changes.review_undo(paths, changes.history(paths)[0]["id"])
+        changes.undo(paths, undo["transaction"], reviewed=undo)
+        changes.undo(paths, connected["id"], reviewed=changes.review_undo(paths, connected["id"]))
+        for config in configs[:2]:
+            settings = QSettings(str(config), QSettings.IniFormat)
+            self.assertIsNone(settings.value("Appearance/color_scheme_path"))
+            self.assertEqual(bytes(settings.value("SettingsWindow/geometry").data()), b"\x01\xd9\xd0\xcb\x00\x03")
+        self.assertFalse(configs[2].exists())
+
     def test_changed_configuration_rejects_approval_without_overwrite(self):
         self.controller.selectComponent("kitty", True)
         self.settle()

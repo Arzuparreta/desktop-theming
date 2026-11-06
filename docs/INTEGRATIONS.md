@@ -50,13 +50,36 @@ explicit detachment; their original targets are never written. Nested linked
 directories are blocked. The only managed file outside XDG_CONFIG_HOME is the
 conventional `~/.zshrc`; arbitrary external shell config paths are refused.
 
-Kitty/Ghostty retain their include ownership model, allowing unrelated preference
-edits while managing a theme. New file adapters retain the original and exact
-expected snapshots of each edited file. **Any subsequent file edit or mode/link
-change blocks updates and disconnection**, including unrelated edits. Preserve
-those edits and resolve the conflict first; the engine never guesses a merge.
-Sway and swaybg compose their changes into one reviewed file write, with a shared
-original snapshot and independently removable selections.
+Kitty/Ghostty retain their include ownership model. New file adapters retain
+each edited file without our changes (original) and with them (expected).
+
+Managed files keep being edited after application, by people and by programs:
+qt5ct and qt6ct, for example, rewrite their whole file in QSettings spelling and
+order whenever their window closes. **Ownership covers the content we manage,
+not the whole file.** Updates, disconnection and undo apply their change to the
+file as it is now with a deterministic three-way merge:
+
+- INI-style files (qt5ct/qt6ct, kdeglobals, Polybar, Dunst, Mako, foot) merge key
+  by key. Qt values are compared as QSettings reads them, so `"/path"` and
+  `/path` are the same value. Reordered keys and new keys or sections are kept.
+- Other text files merge line by line. Edits elsewhere in the file, including
+  lines added directly before or after our block, are kept in place.
+- Generated files (our palettes and theme includes) and link restoration must
+  still match exactly.
+
+Edits to anything we change, such as a managed color, the palette path or our
+appended lines, are **conflicts**. They pause updates, disconnection and undo
+for that file with the file and setting or line named; nothing is overwritten.
+Put that setting back or edit the file yourself, then check again. Merged
+results are always shown as exact diffs before approval, and a review is
+invalidated if a file changes again before it is approved. Restoring a detached
+link refuses when its local copy gained edits that the link target lacks. Later
+permission changes are kept. Sway and swaybg compose their changes into one
+reviewed file write, with a shared original snapshot and independently removable
+selections.
+
+The Qt adapter writes the palette path the way Qt 5 QSettings spells it (Qt 6
+reads the same spelling), so a qt5ct/qt6ct save does not touch the lines we manage.
 
 GNOME/Xfce retain previous effective preference values, including the original
 theme name, in ownership and history. Disconnection restores those values. This
@@ -78,8 +101,9 @@ desktop configuration languages or custom launch flags.
 
 Automated isolated tests exercise every file adapter through review, apply,
 idempotence, palette update, disconnect and ordered undo. Tests also cover shared
-Sway ownership, symlinks and modes, later edits, partial rollback and interrupted
-recovery. Native GNOME/Xfce protocol tests use simulated commands and never change
+Sway ownership, symlinks and modes, unrelated later edits kept through update,
+undo and disconnection, conflicting edits to managed colors, qt5ct/qt6ct saves
+(simulated and with real QSettings), partial rollback and interrupted recovery. Native GNOME/Xfce protocol tests use simulated commands and never change
 the developer's desktop. Offscreen Qt tests cover selection, unavailable/unknown
 components, approval and export. The bundled smoke test exercises all eighteen
 new file adapters, as well as the existing guided Kitty GUI workflow.
@@ -88,7 +112,8 @@ Already installed zsh/fish, Alacritty and i3 parsers are exercised with private
 HOME/XDG and no desktop connection. GLib tests also compile a private GNOME-shaped
 schema and apply/undo real GSettings values using an isolated keyfile backend,
 with an unusable desktop bus address. QSettings verifies the Qt palette role
-lists and quoted configuration paths. The existing GTK 3 CSS parser checks generated
+lists and configuration paths, reads every value spelling we write and writes the
+same spelling for ASCII values. The existing GTK 3 CSS parser checks generated
 GTK/Wofi/Waybar stylesheet syntax without initializing a display. Rofi validation
 requires an already installed Rofi and private Xvfb; it is skipped if either is
 missing. These checks establish syntax/transaction behavior, not real-session

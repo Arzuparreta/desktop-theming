@@ -104,7 +104,7 @@ def managed(paths, component):
         if component in integrations.FILES:
             record = integrations.load(paths, component)
             if record:
-                integrations.verify(record)
+                integrations.rebase(paths, record)  # Raises when managed colors were changed.
                 for name in record["files"]:
                     changes.safe_parents(Path(name), integrations.root_for(paths, Path(name)))
             return bool(record)
@@ -169,9 +169,10 @@ def discover(paths, *, running=None, which=None, environ=None):
                 else:
                     item["configuration"] = configuration.inspect(paths, ident, config_target(paths, ident))
                 item["configuration"]["ownership_record"] = paths.ownership(ident).exists()
-                if item["configuration"]["ownership_record"] and not item["managed"]:
+                if (item["configuration"]["ownership_record"] and not item["managed"]
+                        and not item["configuration"]["issues"]):
                     item["configuration"]["issues"].append(
-                        "Ownership exists but managed configuration has drifted; resolve before applying.")
+                        "Managed colors were changed outside desktop-theming; resolve them before applying.")
             except (OSError, ValueError) as exc:
                 item["configuration"] = {"issues": [str(exc)], "sources": []}
         if category == "Session":
