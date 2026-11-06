@@ -282,6 +282,22 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(values["color-scheme"], "default")
             self.assertEqual(self.messages, [])
 
+    def test_repository_and_appimage_icon_renders_the_application_icon(self):
+        from PySide6.QtGui import QImage, QPainter
+        from PySide6.QtSvg import QSvgRenderer
+
+        repo = Path(__file__).resolve().parents[1]
+        png = QImage(str(repo / "assets/icon.png")).convertToFormat(QImage.Format_ARGB32)
+        self.assertEqual((png.width(), png.height()), (256, 256))
+        rendered = QImage(256, 256, QImage.Format_ARGB32)
+        rendered.fill(Qt.transparent)
+        painter = QPainter(rendered)
+        QSvgRenderer(str(repo / "desktop_theming/ui/icon.svg")).render(painter)
+        painter.end()
+        samples = [abs(a - b) for y in range(0, 256, 4) for x in range(0, 256, 4)
+                   for a, b in zip(png.pixelColor(x, y).getRgb(), rendered.pixelColor(x, y).getRgb(), strict=True)]
+        self.assertLess(sum(samples) / len(samples), 2, "Re-render assets/icon.png from ui/icon.svg")
+
     def test_qt_native_palette_and_path_parse_with_qsettings(self):
         from desktop_theming import integrations, service
 

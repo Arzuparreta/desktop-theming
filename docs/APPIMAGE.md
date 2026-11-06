@@ -59,7 +59,15 @@ are loaded relative to the bundled module, not a source checkout or `/usr`.
 The palette resource `bin/walltheme` is included for its pure palette functions;
 its legacy application entry point and apply hooks are never invoked.
 
+The AppDir carries the icon as a 256×256 PNG `.DirIcon`, the format file-manager
+thumbnailers and AppImage integration tools read, plus hicolor PNG/SVG theme
+icons. A file manager shows an AppImage's own icon only through such a
+thumbnailer: for example, Thunar needs `tumbler` and an AppImage thumbnailer.
+
 ```sh
+# Extract-and-run unpacks the whole AppImage (about 250 MB) under $TMPDIR and
+# leaves it there; /tmp is often a small RAM disk. Use the ignored build directory.
+export TMPDIR="$PWD/build/smoke-tmp"; mkdir -p "$TMPDIR"
 # This diagnostic always uses a fresh temporary HOME/XDG, including in the bundle.
 APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
 # Exercise X11/OpenGL with the host's graphics drivers, also in temporary HOME/XDG.
@@ -70,6 +78,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-feh
 # Requires existing feh, xprop and Xvfb. Starts and stops its own private X server.
 # Tests actual reviewed Kitty + wallpaper apply, undo and failing-child rollback.
 APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-wallpaper
+rm -rf build/smoke-tmp; unset TMPDIR
 sha256sum dist/DesktopTheming-x86_64.AppImage
 ```
 
@@ -134,7 +143,8 @@ To cut a release:
    (replace the version with the source version).
 3. Wait for the workflow to finish. Verify the public release tag resolves to
    the built source commit, download both assets, check the SHA-256 and run
-   `APPIMAGE_EXTRACT_AND_RUN=1 ./DesktopTheming-x86_64.AppImage --smoke-test`.
+   `APPIMAGE_EXTRACT_AND_RUN=1 ./DesktopTheming-x86_64.AppImage --smoke-test`,
+   with `TMPDIR` set to a private directory that you remove afterwards.
    With an accessible X11 display, also run `--smoke-test-x11` on the downloaded
    asset to verify host graphics initialization.
    Run `--smoke-test-feh` when feh is installed. With feh, xprop and Xvfb available,
