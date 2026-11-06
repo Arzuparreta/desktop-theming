@@ -94,6 +94,11 @@ def make_plan(paths, profile, *, which=None):
     inspections.update(file_reports)
     for component in sorted((removed | set(profile["components"])) & set(integrations.FILES)):
         warnings.append(integrations.CAPABILITIES[component])
+        record = integrations.load(paths, component)
+        edited = integrations.carried(paths, record) if record else []
+        if edited:
+            warnings.append(f"{component}: keep the changes made outside desktop-theming to "
+                            + ", ".join(edited) + " since they were themed.")
         if component in removed:
             warnings.append(f"Disconnect {component}: restore its recorded previous appearance settings.")
         elif file_reports[component].get("linked_paths"):
@@ -157,6 +162,12 @@ def make_plan(paths, profile, *, which=None):
         inputs.extend(report["inputs"])
         # Once owned, newly added color sources are conflicts, not fresh permission
         # to overwrite manual changes with a previously saved takeover option.
+        if record and not report["issues"] and report["has_existing_colors"]:
+            source = next((s for s in report["sources"] if s["kind"] == "color" or s.get("colors")),
+                          {"path": str(config), "directive": "", "line": "?"})
+            raise changes.Conflict(f"{source['path']}: the color setting {source['directive']} on line "
+                                   f"{source['line']} was added outside desktop-theming after it was applied. "
+                                   "Your edit is kept; remove it or disconnect before trying again.")
         base = configuration.prepare(text, report,
                                      replace_colors=not record and options.get("replace_colors", False))
         output = paths.theme(component)

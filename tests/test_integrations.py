@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, integrations, inventory, presentation, service, theme
+from desktop_theming import changes, formats, integrations, inventory, presentation, service, theme
 from desktop_theming.paths import Paths
 
 EXAMPLES = {
@@ -146,19 +146,128 @@ class IntegrationTests(unittest.TestCase):
         self.apply(self.profile)
         self.assertEqual(config.read_bytes(), original)
 
-    def test_later_edits_block_update_disconnect_and_undo(self):
-        config = self.seed("foot")
-        profile = self.profile_for(["foot"])
-        result = self.apply(profile)
-        edited = config.read_text() + "\n# My later edit\n"
-        config.write_text(edited)
-        for target in (profile, self.profile):
-            with self.assertRaisesRegex(ValueError, "edited after"):
-                self.plan(target)
-        with self.assertRaisesRegex(ValueError, "edited after"):
-            changes.review_undo(self.paths, result["id"])
-        self.assertEqual(config.read_text(), edited)
-        self.assertFalse(inventory.managed(self.paths, "foot"))
+    def isolate(self, private):
+        root = Path(private)
+        self.paths = Paths(root, root / "config", root / "state")
+        return root
+
+    def undo(self, result):
+        return changes.undo(self.paths, result["id"], reviewed=changes.review_undo(self.paths, result["id"]))
+
+    def test_unrelated_later_edits_survive_update_undo_and_disconnect(self):
+        edits = {  # component: (edit made outside the app, text it leaves)
+            "foot": (lambda text: text.replace("size=13", "size=14"), "size=14"),
+            "polybar": (lambda text: text.replace("monitor=eDP-1", "monitor=HDMI-1"), "monitor=HDMI-1"),
+            "dunst": (lambda text: text + "\n[slack]\nappname=slack\n", "[slack]\nappname=slack\n"),
+            "alacritty": (lambda text: text.replace("size = 13.5", "size = 14.0"), "size = 14.0"),
+            "i3": (lambda text: "# later\n" + text + "bindsym $mod+d exec rofi\n", "bindsym $mod+d exec rofi"),
+            "gtk3": (lambda text: "label { margin: 2px; }\n" + text, "label { margin: 2px; }"),
+            "zsh": (lambda text: text + "alias gs='git status'\n", "alias gs='git status'"),
+        }
+        for component, (edit, marker) in edits.items():
+            with self.subTest(component=component), tempfile.TemporaryDirectory(dir=self.root) as private:
+                self.isolate(private)
+                config = self.seed(component)
+                original = config.read_text()
+                profile = self.profile_for([component])
+                connected = self.apply(profile)
+                themed = config.read_text()
+                config.write_text(edit(themed))
+                self.assertTrue(inventory.managed(self.paths, component))
+                plan = self.plan(dict(profile, polarity="light"))
+                self.assertTrue(any("outside desktop-theming" in w for w in plan["warnings"]))
+                update = service.apply_reviewed(self.paths, plan, which=self.which)
+                self.assertNotEqual(config.read_text(), edit(themed))
+                self.assertEqual(config.read_text().count(marker), 1)
+                self.undo(update)
+                self.assertEqual(config.read_text(), edit(themed))
+                disconnected = self.apply(self.profile)
+                self.assertEqual(config.read_text(), edit(original))
+                self.assertEqual(config.stat().st_mode & 0o777, 0o640)
+                self.undo(disconnected)
+                self.assertEqual(config.read_text(), edit(themed))
+                self.undo(connected)
+                self.assertEqual(config.read_text(), edit(original))
+
+    def test_edits_to_managed_colors_pause_update_disconnect_and_undo(self):
+        def last(prefix, replacement):
+            def edit(text):
+                lines = text.splitlines(keepends=True)
+                lines[max(i for i, line in enumerate(lines) if line.startswith(prefix))] = replacement
+                return "".join(lines)
+            return edit
+
+        edits = {
+            "foot": last("background=", "background=ff0000\n"),
+            "polybar": last("primary=", "primary=#ff0000\n"),
+            "i3": last("client.focused ", "client.focused #ff0000 #ff0000 #ffffff #ff0000 #ff0000\n"),
+            "zsh": last("  ZSH_HIGHLIGHT_STYLES[command]", "  ZSH_HIGHLIGHT_STYLES[command]='fg=red'\n"),
+            "qt": last("color_scheme_path=", "color_scheme_path=/usr/share/qt5ct/colors/darker.conf\n"),
+        }
+        for component, edit in edits.items():
+            with self.subTest(component=component), tempfile.TemporaryDirectory(dir=self.root) as private:
+                self.isolate(private)
+                config = self.seed(component)
+                profile = self.profile_for([component])
+                result = self.apply(profile)
+                edited = edit(config.read_text())
+                self.assertNotEqual(edited, config.read_text())
+                config.write_text(edited)
+                for target in (dict(profile, polarity="light"), self.profile):
+                    with self.assertRaisesRegex(changes.Conflict, "changed outside desktop-theming"):
+                        self.plan(target)
+                with self.assertRaisesRegex(changes.Conflict, "changed outside desktop-theming"):
+                    changes.review_undo(self.paths, result["id"])
+                self.assertEqual(config.read_text(), edited)
+                self.assertFalse(inventory.managed(self.paths, component))
+                with patch("desktop_theming.inventory.shutil.which", side_effect=self.which):
+                    info = presentation.connection(self.paths, component)
+                self.assertTrue(info["blocked"])
+                self.assertIn("changed outside", info["explanation"])
+
+    def test_qt_tools_saving_their_settings_never_block_themes_or_undo(self):
+        # Reported in the field: qt5ct rewrote qt5ct.conf after a theme was applied,
+        # unquoting the palette path and saving its window geometry.
+        old, new = "@ByteArray(\\x1\\xd9\\xd0\\xcb\\0\\x3\\x3\\xc0)", "@ByteArray(\\x1\\xd9\\xd0\\xcb\\0\\x3\\0#)"
+        qt5ct = ("[Appearance]\ncolor_scheme_path=/usr/share/qt5ct/colors/simple.conf\ncustom_palette=true\n"
+                 "icon_theme=Papirus-Dark\nstandard_dialogs=default\nstyle=Fusion\n\n"
+                 '[Fonts]\nfixed="Monospace,10,-1,5,50,0,0,0,0,0"\n\n'
+                 f"[SettingsWindow]\ngeometry={old}\n\n[Troubleshooting]\nforce_raster_widgets=1\n")
+        writers = {"current": formats.qsettings_string,
+                   "0.1.4": lambda value: json.dumps(value, ensure_ascii=False)}
+        for release, writer in writers.items():
+            with self.subTest(release=release), tempfile.TemporaryDirectory(dir=self.root) as private:
+                self.isolate(private)
+                qt5, qt6, scheme = integrations.targets(self.paths, "qt")
+                qt5.parent.mkdir(parents=True)
+                qt5.write_text(qt5ct)
+                profile = self.profile_for(["qt"])
+                with patch.object(formats, "qsettings_string", writer):
+                    connected = self.apply(profile)
+                # Both tools save their whole file in QSettings' own spelling and order.
+                qt5.write_text(qt5.read_text().replace(f'"{scheme}"', str(scheme)).replace(old, new))
+                qt6.write_text(f"[Appearance]\ncolor_scheme_path={scheme}\ncustom_palette=true\n"
+                               f"icon_theme=breeze\nstyle=Fusion\n\n[SettingsWindow]\ngeometry={new}\n")
+                saved = {path: path.read_text() for path in (qt5, qt6)}
+                self.assertTrue(inventory.managed(self.paths, "qt"))
+                with patch("desktop_theming.inventory.shutil.which", side_effect=self.which):
+                    self.assertFalse(presentation.connection(self.paths, "qt")["blocked"])
+                plan = self.plan(dict(profile, polarity="light"))
+                self.assertNotIn(str(qt5), [item["path"] for item in plan["changes"]])
+                self.assertNotIn(str(qt6), [item["path"] for item in plan["changes"]])
+                update = service.apply_reviewed(self.paths, plan, which=self.which)
+                self.assertEqual({path: path.read_text() for path in saved}, saved)
+                self.undo(update)
+                self.assertEqual({path: path.read_text() for path in saved}, saved)
+                review = changes.review_undo(self.paths, connected["id"])
+                diff = next(item["diff"] for item in review["changes"] if item["path"] == str(qt5))
+                self.assertNotIn("geometry", diff)
+                changes.undo(self.paths, connected["id"], reviewed=review)
+                self.assertEqual(qt5.read_text(), qt5ct.replace(old, new))
+                self.assertEqual(qt6.read_text(), f"[Appearance]\nicon_theme=breeze\nstyle=Fusion\n\n"
+                                                  f"[SettingsWindow]\ngeometry={new}\n")
+                self.assertFalse(scheme.exists())
+                self.assertFalse(self.paths.ownership("qt").exists())
 
     def test_review_fingerprints_colors_symlinks_and_native_settings(self):
         config = self.seed("alacritty")

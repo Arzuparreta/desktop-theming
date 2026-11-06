@@ -161,15 +161,26 @@ class PlatformTests(unittest.TestCase):
             self.apply(plan)
         self.assertFalse((self.root / "unrelated").exists())
 
-    def test_undo_refuses_later_edits_before_restoring_anything(self):
+    def test_undo_keeps_unrelated_later_edits(self):
         result = self.apply()
         config = self.paths.config / "kitty/kitty.conf"
-        config.write_text(config.read_text() + "font_size 22\n")
+        config.write_text("font_family Iosevka\n" + config.read_text() + "font_size 22\n")
+        changes.undo(self.paths, result["id"], reviewed=changes.review_undo(self.paths, result["id"]))
+        self.assertEqual(config.read_text(), "font_family Iosevka\nfont_size 22\n")
+        self.assertFalse(self.paths.profile.exists())
+        self.assertFalse(self.paths.theme("kitty").exists())
+
+    def test_undo_refuses_edits_to_managed_content_before_restoring_anything(self):
+        result = self.apply()
+        config = self.paths.config / "kitty/kitty.conf"
+        edited = config.read_text().replace("include ", "include  ")
+        config.write_text(edited)
         profile = self.paths.profile.read_bytes()
-        with self.assertRaisesRegex(ValueError, "edited after"):
+        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
             changes.undo(self.paths, result["id"])
         self.assertEqual(self.paths.profile.read_bytes(), profile)
-        self.assertIn("font_size 22", config.read_text())
+        self.assertEqual(config.read_text(), edited)
+        self.assertEqual(changes.history(self.paths)[0]["status"], "applied")
 
     def test_failed_write_rolls_back_previous_changes(self):
         config = self.write("kitty/kitty.conf", "font_size 15\n")

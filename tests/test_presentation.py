@@ -66,4 +66,11 @@ class PresentationTests(unittest.TestCase):
     def test_export_and_stale_errors_have_relevant_next_actions(self):
         self.assertEqual(presentation.problem("export", "exists")["action"], "save")
         self.assertEqual(presentation.problem("apply", "The reviewed plan is stale")["action"], "review")
-        self.assertEqual(presentation.problem("restore", "edited after application")["action"], "history")
+        self.assertEqual(presentation.problem("restore", "The reviewed restoration is stale")["action"], "history")
+        conflict = ("The reviewed plan is stale: /x/qt5ct.conf: the setting color_scheme_path in "
+                    "[Appearance] was changed outside desktop-theming after it was applied.")
+        for context in ("apply", "restore", "review"):
+            problem = presentation.problem(context, conflict)
+            self.assertEqual(problem["title"], "Theme settings were changed outside the app")
+            self.assertEqual(problem["action"], "refresh")
+        self.assertNotIn("after review", presentation.problem("restore", "edited after application")["title"])

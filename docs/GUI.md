@@ -84,8 +84,9 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
   previous colors will be restored. Selection is separate from configured files
   and from the appearance of a running terminal.
 - **History:** the latest active transaction offers reviewed undo or recovery.
-  Review shows the exact remaining reverse changes. Later edits and journal
-  changes invalidate approval; conflicts are displayed without overwriting them.
+  Review shows the exact remaining reverse changes, keeping edits made since then
+  to other settings. Edits after review and journal changes invalidate approval;
+  conflicts with managed colors name the file and setting without overwriting them.
   Interrupted transactions also show a direct recovery action above the main view.
 - **Export:** choose a native file format from the format selector, inspect the
   generated theme, copy it or save a new file. Native GNOME/Xfce preferences are

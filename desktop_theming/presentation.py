@@ -36,7 +36,8 @@ def connection(paths, component):
     elif linked_folder:
         explanation = "The configuration folder links to another location. This version cannot safely manage linked folders."
     elif report.get("ownership_record") and not item["managed"]:
-        explanation = "This configuration changed outside the app. Your edits are preserved; automatic changes are paused."
+        explanation = ("The colors this app manages were changed outside it. Your changes are kept; "
+                       "theme updates are paused until that setting is put back.")
     elif any("mixes colors" in issue for issue in issues):
         explanation = "An included file mixes colors with other preferences. This version cannot safely separate them."
     else:
@@ -114,10 +115,18 @@ def problem(context, detail):
     if context == "export":
         return {"title": "The theme could not be saved", "body": "Choose a new filename in a writable folder. Existing files and links are preserved.",
                 "action": "save", "label": "Choose another filename…"}
+    conflict = {"title": "Theme settings were changed outside the app",
+                "body": "Those changes are kept and nothing was overwritten. Show details to see the file and "
+                        "setting, put that setting back or edit it yourself, then check again.",
+                "action": "refresh", "label": "Check again"}
+    if context in ("apply", "restore", "review") and "outside desktop-theming" in detail:
+        return conflict
     if context in ("apply", "restore"):
-        if "stale" in detail or "changed since review" in detail or "edited after" in detail:
-            return {"title": "The configuration changed after review", "body": "Your later edits have been preserved. Review the current files before trying again.",
+        if "stale" in detail or "changed since review" in detail:
+            return {"title": "Files changed after review", "body": "Nothing was changed. Review again to see the current files before approving.",
                     "action": "review" if context == "apply" else "history", "label": "Review again" if context == "apply" else "Open history"}
+        if "edited after" in detail:
+            return conflict
         return {"title": "The changes could not be completed", "body": "Check history for recovery before trying again. The details below explain what blocked the operation.",
                 "action": "history", "label": "Open history"}
     if context == "review":
