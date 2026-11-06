@@ -1,9 +1,12 @@
-"""Native file theme adapters, with strict ownership and reversible disconnection.
+"""Native file theme adapters, with ownership of managed content and reversible disconnection.
 
-Unlike the terminal include adapters, these own the exact edited files. Any
-later edit pauses updates/disconnection instead of guessing a configuration merge.
+Ownership records keep each file without our changes (original) and with them
+(expected). Programs and people may keep editing these files: edits to other
+content are carried forward by a three-way merge, while edits to the colors we
+manage pause updates and disconnection instead of being overwritten.
 """
 
+import functools
 import json
 import os
 import re
@@ -13,7 +16,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import changes, formats
+from . import changes, formats, merge
 
 FILES = {
     "alacritty": ("alacritty/alacritty.toml",),
@@ -56,6 +59,10 @@ CAPABILITIES = {
     "zsh": "Native ZLE selection/search colors and optional zsh-syntax-highlighting roles. Keep your prompt and plugins. Open a new interactive shell.",
     "fish": "Native interactive syntax, pager and selection colors. Keep prompt and functions. Open a new interactive shell.",
 }
+# Settings files edited key by key. Qt tools rewrite their whole file on save,
+# so values are compared the way QSettings reads them.
+INI_FILES = {"foot": {"root": True}, "mako": {"root": True}, "dunst": {}, "plasma": {}, "polybar": {},
+             "qt": {"same": formats.qsettings_same}}
 
 
 def targets(paths, component):
@@ -74,6 +81,48 @@ def targets(paths, component):
 
 def root_for(paths, path):
     return changes.config_root(paths, path)
+
+
+def merger(paths, path):
+    """How later edits to a managed file are combined, or None if it must match exactly."""
+    from . import inventory
+
+    path = Path(path)
+    for component in FILES:
+        try:
+            files = targets(paths, component)
+        except ValueError:
+            continue
+        if path not in files:
+            continue
+        if component == "qt" and path == files[2]:
+            return None  # Our generated palette; any edit there is to managed colors.
+        if component in INI_FILES:
+            return functools.partial(merge.ini, **INI_FILES[component])
+        return merge.lines
+    for component in ("kitty", "ghostty"):
+        try:
+            if path == inventory.config_target(paths, component):
+                return merge.lines
+        except ValueError:
+            continue
+    return None
+
+
+def carried(paths, record):
+    """Owned files edited after application; reviewed plans keep those edits."""
+    return [name for name, pair in record["files"].items()
+            if changes.snapshot(Path(name)) != pair["expected"]]
+
+
+def rebase(paths, record):
+    """Each owned file without our changes, keeping edits made after application.
+
+    Raises Conflict when those edits touch the content we manage.
+    """
+    return {name: changes.carry(Path(name), pair["expected"], changes.snapshot(Path(name)),
+                                pair["original"], merger(paths, name))
+            for name, pair in record["files"].items()}
 
 
 def validate_shell(component, text, tool):
@@ -302,8 +351,11 @@ def transform(paths, component, originals, value):
         if any(c in scheme for c in "\r\n\0"):
             raise ValueError("Qt palette paths cannot contain line breaks.")
         for path in paths_list[:2]:
+            # Keep qt5ct/qt6ct's own spelling of an equal value, so their saves
+            # and ours never produce differences in the settings we manage.
             texts[str(path)] = formats.ini(texts[str(path)], {"Appearance": {
-                "custom_palette": "true", "color_scheme_path": json.dumps(scheme, ensure_ascii=False)}})
+                "custom_palette": "true", "color_scheme_path": formats.qsettings_string(scheme)}},
+                same=formats.qsettings_same)
         texts[scheme] = rendered
     elif component in ("waybar", "wofi", "rofi", "gtk3", "gtk4"):
         texts[first] = formats.css(text, rendered)
@@ -369,16 +421,10 @@ def load(paths, component):
         raise ValueError(f"Invalid ownership record for {component}: {exc}; preserve it for recovery.") from exc
 
 
-def verify(record):
-    for name, pair in record["files"].items():
-        if changes.snapshot(Path(name)) != pair["expected"]:
-            raise ValueError(f"Managed configuration was edited after application: {name}. "
-                             "Preserve your edits and resolve the conflict before updating or disconnecting.")
-
-
 def inspect(paths, component):
     report = {"sources": [], "issues": [], "inputs": [], "has_existing_colors": False,
-              "scope": CAPABILITIES[component] + " Later file edits block updates and disconnection."}
+              "scope": CAPABILITIES[component] + " Later edits to other settings are kept; "
+                       "changing the managed colors yourself pauses updates and disconnection."}
     try:
         config_paths = targets(paths, component)
         report["path"] = str(config_paths[0])
@@ -390,7 +436,7 @@ def inspect(paths, component):
         report["link_target"] = first.get("target", "")
         report["linked_paths"] = [name for name, state in states.items() if state["kind"] == "symlink"]
         if record:
-            verify(record)
+            originals = rebase(paths, record)
         for name, state in states.items():
             changes.safe_parents(Path(name), root_for(paths, Path(name)))
             report["inputs"].append({"path": name, "fingerprint": changes.digest(state)})
@@ -404,8 +450,7 @@ def inspect(paths, component):
         # Validate syntax without importing Pillow or generating a palette.
         sample = {"special": {"background": "#111111", "foreground": "#eeeeee", "cursor": "#eeeeee"},
                   "colors": {f"color{i}": "#99bbdd" for i in range(16)}, "wallpaper": "/tmp/preview.png"}
-        originals = {name: pair["original"] for name, pair in record["files"].items()} if record else states
-        transform(paths, component, originals, sample)
+        transform(paths, component, originals if record else states, sample)
     except (OSError, ValueError, UnicodeError) as exc:
         report["issues"].append(str(exc))
     return report
@@ -415,7 +460,7 @@ def plan_all(paths, previous, profile, value, *, which=None):
     """Compose file adapters before writing, including shared Sway config files."""
     selected = set(profile["components"]) & set(FILES)
     old = set(previous["components"]) & set(FILES)
-    records, originals, current, reports = {}, {}, {}, {}
+    records, originals, written, current, reports = {}, {}, {}, {}, {}
     for component in sorted(selected | old):
         record = load(paths, component)
         if component in old and not record:
@@ -423,18 +468,22 @@ def plan_all(paths, previous, profile, value, *, which=None):
         if component not in old and record:
             raise ValueError(f"Orphan ownership record for {component}; resolve it before planning.")
         if record:
-            verify(record)
             records[component] = record
             for name, pair in record["files"].items():
-                if name in originals and originals[name] != pair["original"]:
+                if (originals.get(name, pair["original"]) != pair["original"]
+                        or written.get(name, pair["expected"]) != pair["expected"]):
                     raise ValueError("Shared configuration restoration records disagree; preserve them for recovery.")
-                originals[name] = pair["original"]
+                originals[name], written[name] = pair["original"], pair["expected"]
         for path in targets(paths, component):
             name = str(path)
             changes.safe_parents(path, root_for(paths, path))
             current[name] = changes.snapshot(path)
     for name, state in current.items():
         originals.setdefault(name, state)
+    # Owned files may have been edited since application. Edits to other content
+    # are kept in the restoration data; edits to managed content stop here.
+    kept = {name: changes.carry(Path(name), base, current[name], originals[name], merger(paths, name))
+            for name, base in written.items()}
     if "foot" in selected:
         from . import wallpaper
 
@@ -464,20 +513,25 @@ def plan_all(paths, previous, profile, value, *, which=None):
     for component in sorted(selected):
         subset = {str(p): combined[str(p)] for p in targets(paths, component)}
         rendered = transform(paths, component, subset, value)
-        if component in ("zsh", "fish"):
-            validate_shell(component, next(iter(rendered.values())), (which or shutil.which)(component))
         for name, text in rendered.items():
             combined[name] = changes.text_snapshot(text, originals[name].get("mode", 0o600))
+    # Apply the new palette to the files as they are now, so later edits and the
+    # order chosen by the program or person who made them stay in place.
+    # inspect() has already run each adapter's safety checks on that content.
+    for name, base in written.items():
+        combined[name] = changes.carry(Path(name), base, current[name], combined[name], merger(paths, name))
+    originals.update(kept)
+    for component in sorted(selected & {"zsh", "fish"}):
+        text = changes.text_of(combined[str(targets(paths, component)[0])])
+        validate_shell(component, text, (which or shutil.which)(component))
     proposed, inputs = [], []
     for name, state in combined.items():
         path = Path(name)
         if state["kind"] == "symlink":
+            changes.check_restoration_target(path, state)
             target = Path(state["target"])
             target = target if target.is_absolute() else path.parent / target
-            actual = changes.snapshot(target)
-            if changes.text_of(actual) != changes.text_of(state) or actual.get("mode") != state["mode"]:
-                raise ValueError("Original dotfiles target changed; refusing to restore its link.")
-            inputs.append({"path": str(target), "fingerprint": changes.digest(actual)})
+            inputs.append({"path": str(target), "fingerprint": changes.digest(changes.snapshot(target))})
         inputs.append({"path": name, "fingerprint": changes.digest(current[name])})
         item = changes.replacement(path, state, root_for(paths, path))
         if item:

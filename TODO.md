@@ -41,6 +41,9 @@ are one historical example, not the architecture or a required desktop stack.
 - [x] i3/Sway/Hyprland border roles and shared Sway/background file composition.
 - [ ] Verify every new adapter's actual appearance in disposable real desktop sessions.
 - [ ] Improve discovery for custom config locations, Flatpak and runtime desktop settings.
+- [ ] Offer reviewed conflict resolutions in the GUI: keep my edit and stop managing, or
+      replace it with the theme value.
+- [ ] Accept KConfig keys with spaces (for example `[KFileDialog Settings]`) in kdeglobals.
 - [ ] Extend conservative parsing to quoted/optional includes and Ghostty resource themes.
 - [ ] Optional reviewed dependency installation with per-distribution package information.
 - [ ] Portable example profiles with no personal paths, services or hardware assumptions.

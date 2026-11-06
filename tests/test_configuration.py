@@ -199,14 +199,23 @@ class ConfigurationTests(unittest.TestCase):
         self.disconnect()
         self.assertIn("font_size 19", config.read_text())
 
-    def test_disconnect_does_not_overwrite_later_edits_when_restoring_sources(self):
+    def test_disconnect_restores_replaced_sources_and_keeps_later_edits(self):
         config = self.config("background black\nfont_size 14\n")
         self.takeover()
         self.apply()
         config.write_text(config.read_text() + "font_size 19\n")
-        with self.assertRaisesRegex(ValueError, "later edits"):
+        self.disconnect()
+        self.assertEqual(config.read_text(), "background black\nfont_size 14\nfont_size 19\n")
+
+    def test_disconnect_never_overwrites_edits_next_to_restored_sources(self):
+        config = self.config("background black\nfont_size 14\n")
+        self.takeover()
+        self.apply()
+        edited = "foreground white\n" + config.read_text()
+        config.write_text(edited)
+        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
             self.disconnect()
-        self.assertIn("font_size 19", config.read_text())
+        self.assertEqual(config.read_text(), edited)
 
     def test_unowned_generated_file_and_marked_block_are_not_adopted(self):
         theme = self.write(self.paths.theme("kitty"), "personal colors\n")
@@ -268,19 +277,19 @@ class ConfigurationTests(unittest.TestCase):
         self.disconnect()
         self.assertIn("theme = My Colors", config.read_text())
 
-    def test_disconnect_preserves_even_whitespace_and_mode_conflicts(self):
+    def test_disconnect_preserves_conflicting_whitespace_and_later_permissions(self):
         config = self.config("background black\n")
         self.takeover()
         self.apply()
         original = config.read_text()
         config.write_text(original + "\n")
-        with self.assertRaisesRegex(ValueError, "later edits"):
+        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
             self.disconnect()
         self.assertEqual(config.read_text(), original + "\n")
         config.write_text(original)
         config.chmod(0o400)
-        with self.assertRaisesRegex(ValueError, "mode changed"):
-            self.disconnect()
+        self.disconnect()
+        self.assertEqual(config.read_text(), "background black\n")
         self.assertEqual(config.stat().st_mode & 0o777, 0o400)
 
     def test_invalid_resolution_options_are_rejected(self):

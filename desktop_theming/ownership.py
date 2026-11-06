@@ -1,9 +1,8 @@
 """Persistent ownership of a color integration, separate from user selection."""
 
 import json
-from pathlib import Path
 
-from . import changes, configuration
+from . import changes, configuration, merge
 
 
 def load(paths, component):
@@ -39,37 +38,26 @@ def verify(paths, component, record, config, current):
     if record["path"] != str(config):
         raise ValueError(f"Configuration path changed for {component}; restore it or undo first.")
     if current["kind"] != "file":
-        raise ValueError(f"Managed configuration was replaced: {config}. Resolve it or undo first.")
+        raise changes.Conflict(f"{config} was replaced or removed outside desktop-theming after it was "
+                               "applied. Your version is kept; resolve it or undo before trying again.")
     text, block = configuration.split_block(changes.text_of(current))
     if block != record["block"]:
-        raise ValueError(f"Managed block was edited in {config}; resolve the conflict or undo first.")
+        raise changes.Conflict(f"{config}: the desktop-theming block was changed outside desktop-theming "
+                               "after it was applied. Your edit is kept; restore the block or undo before "
+                               "trying again.")
     if changes.snapshot(paths.theme(component)) != record["theme"]:
-        raise ValueError(f"Managed theme was edited for {component}; resolve the conflict or undo first.")
+        raise changes.Conflict(f"{paths.theme(component)}: this generated file was changed outside "
+                               "desktop-theming after it was applied. Your version is kept; restore or "
+                               "remove it before trying again.")
     return text
 
 
 def disconnect(paths, component, record, config, current):
+    """Remove our block and restore replaced color sources, keeping later edits."""
     text = verify(paths, component, record, config, current)
-    original = record["original"]
-    if current["mode"] != record["config_mode"]:
-        raise ValueError(f"Configuration mode changed for {config}; preserve it and resolve before disconnecting.")
-    if text == record["base"]:
-        if original["kind"] == "symlink":
-            target = Path(original["target"])
-            if not target.is_absolute():
-                target = config.parent / target
-            expected = dict(original, kind="file")
-            expected.pop("target")
-            # A symlink chain is fine to read, but verify its final bytes/mode.
-            actual = changes.snapshot(target)
-            actual.pop("target", None)
-            if actual["kind"] == "symlink":
-                actual["kind"] = "file"
-            if actual != expected:
-                raise ValueError("Original dotfiles target changed; refusing to restore its link.")
-        return original
-    # Without replaced sources, unrelated preferences can survive disconnection.
-    if original["kind"] != "symlink" and not record["replaced_colors"]:
-        return changes.text_snapshot(text, current["mode"])
-    raise ValueError(f"Cannot restore previous color sources in {config} over later edits. "
-                     "Preserve your edits and resolve the conflict first.")
+    base = changes.text_snapshot(record["base"], record["config_mode"])
+    restored = changes.carry(config, base, changes.text_snapshot(text, current["mode"]),
+                             record["original"], merge.lines)
+    # A link is restored only while its target still holds the merged contents.
+    changes.check_restoration_target(config, restored)
+    return restored

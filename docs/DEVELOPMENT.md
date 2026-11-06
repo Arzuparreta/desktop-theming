@@ -20,6 +20,7 @@ MCP and a small fallback CLI for agents are future adapters.
 - `desktop_theming/theme.py`: palette engine access and terminal renderers.
 - `desktop_theming/service.py`: profile validation and reviewed plan generation/application.
 - `desktop_theming/changes.py`: conflict checks, file replacement and undo journals.
+- `desktop_theming/merge.py`: three-way line and INI key merges that keep later outside edits.
 - `desktop_theming/paths.py`: HOME/XDG data locations.
 - `bin/walltheme`, `config/`, `scripts/install-thinkpad.sh`: original legacy workflow.
 - `install.sh`, `scripts/install-platform.py`: describe GUI launch options and refuse automatic installation;
@@ -64,7 +65,8 @@ bash -n install.sh scripts/install-thinkpad.sh
 ```
 
 Tests use disposable HOME/XDG trees. They cover selection, unrelated preferences,
-stale plans and dependency files, legacy-shaped pywal/walltheme includes,
+stale plans and dependency files, later outside edits kept or reported as
+conflicts, legacy-shaped pywal/walltheme includes,
 color-only and mixed includes, broken/detached symlinks, rejected directory
 symlinks, mode preservation, ownership drift, rollback, interrupted recovery,
 undo order, disconnection and normal installation without desktop changes.

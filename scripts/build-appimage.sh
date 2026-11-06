@@ -25,7 +25,12 @@ rm -rf -- "$appdir"
 mkdir -p "$appdir/usr"
 cp -a dist/desktop-theming "$appdir/usr/app"
 install -m 644 packaging/desktop-theming.desktop "$appdir/desktop-theming.desktop"
-install -m 644 desktop_theming/ui/icon.svg "$appdir/desktop-theming.svg"
+# File managers and AppImage tools read .DirIcon, which the AppImage format
+# expects to be a PNG. Ship it as a regular file, plus hicolor theme icons.
+install -m 644 assets/icon.png "$appdir/desktop-theming.png"
+install -m 644 assets/icon.png "$appdir/.DirIcon"
+install -D -m 644 assets/icon.png "$appdir/usr/share/icons/hicolor/256x256/apps/desktop-theming.png"
+install -D -m 644 desktop_theming/ui/icon.svg "$appdir/usr/share/icons/hicolor/scalable/apps/desktop-theming.svg"
 cat > "$appdir/AppRun" <<'EOF'
 #!/bin/sh
 appdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

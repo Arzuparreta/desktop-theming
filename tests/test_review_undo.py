@@ -39,9 +39,19 @@ class RestorationReviewTests(unittest.TestCase):
     def test_later_user_edit_is_preserved(self):
         plan = changes.review_undo(self.paths, self.ident)
         self.config.write_text("font_size 30\n")
-        with self.assertRaisesRegex(ValueError, "edited after"):
+        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
             changes.undo(self.paths, self.ident, reviewed=plan)
         self.assertEqual(self.config.read_text(), "font_size 30\n")
+
+    def test_edit_after_review_invalidates_the_reviewed_merge(self):
+        plan = changes.review_undo(self.paths, self.ident)
+        self.config.write_text(self.config.read_text() + "font_size 30\n")
+        with self.assertRaisesRegex(ValueError, "stale"):
+            changes.undo(self.paths, self.ident, reviewed=plan)
+        self.assertTrue(self.config.read_text().endswith("font_size 30\n"))
+        fresh = changes.review_undo(self.paths, self.ident)
+        changes.undo(self.paths, self.ident, reviewed=fresh)
+        self.assertEqual(self.config.read_text(), self.original + "font_size 30\n")
 
     def test_tampered_review_is_rejected(self):
         plan = changes.review_undo(self.paths, self.ident)

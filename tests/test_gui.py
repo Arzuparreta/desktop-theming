@@ -282,6 +282,22 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(values["color-scheme"], "default")
             self.assertEqual(self.messages, [])
 
+    def test_repository_and_appimage_icon_renders_the_application_icon(self):
+        from PySide6.QtGui import QImage, QPainter
+        from PySide6.QtSvg import QSvgRenderer
+
+        repo = Path(__file__).resolve().parents[1]
+        png = QImage(str(repo / "assets/icon.png")).convertToFormat(QImage.Format_ARGB32)
+        self.assertEqual((png.width(), png.height()), (256, 256))
+        rendered = QImage(256, 256, QImage.Format_ARGB32)
+        rendered.fill(Qt.transparent)
+        painter = QPainter(rendered)
+        QSvgRenderer(str(repo / "desktop_theming/ui/icon.svg")).render(painter)
+        painter.end()
+        samples = [abs(a - b) for y in range(0, 256, 4) for x in range(0, 256, 4)
+                   for a, b in zip(png.pixelColor(x, y).getRgb(), rendered.pixelColor(x, y).getRgb(), strict=True)]
+        self.assertLess(sum(samples) / len(samples), 2, "Re-render assets/icon.png from ui/icon.svg")
+
     def test_qt_native_palette_and_path_parse_with_qsettings(self):
         from desktop_theming import integrations, service
 
@@ -299,6 +315,35 @@ class GuiTests(unittest.TestCase):
             roles = settings.value("ColorScheme/" + group)
             self.assertIsInstance(roles, list)
             self.assertEqual(len(roles), 21)
+
+    def test_qt_settings_saves_keep_themes_updatable_and_undoable(self):
+        from PySide6.QtCore import QByteArray
+
+        from desktop_theming import integrations, inventory, service
+
+        paths = Paths(self.root, self.root / 'config #1 "quoted"', self.root / "state")
+        profile = dict(service.DEFAULT_PROFILE, components=["qt"])
+        with patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
+            connected = service.apply_reviewed(paths, service.make_plan(paths, profile))
+            configs = integrations.targets(paths, "qt")
+            for config in configs[:2]:  # What qt5ct/qt6ct do when their window closes.
+                settings = QSettings(str(config), QSettings.IniFormat)
+                settings.setValue("SettingsWindow/geometry", QByteArray(b"\x01\xd9\xd0\xcb\x00\x03"))
+                settings.sync()
+            saved = {config: config.read_text() for config in configs[:2]}
+            self.assertTrue(inventory.managed(paths, "qt"))
+            plan = service.make_plan(paths, dict(profile, polarity="light"))
+            self.assertFalse({str(c) for c in configs[:2]} & {item["path"] for item in plan["changes"]})
+            service.apply_reviewed(paths, plan)
+        self.assertEqual({config: config.read_text() for config in saved}, saved)
+        undo = changes.review_undo(paths, changes.history(paths)[0]["id"])
+        changes.undo(paths, undo["transaction"], reviewed=undo)
+        changes.undo(paths, connected["id"], reviewed=changes.review_undo(paths, connected["id"]))
+        for config in configs[:2]:
+            settings = QSettings(str(config), QSettings.IniFormat)
+            self.assertIsNone(settings.value("Appearance/color_scheme_path"))
+            self.assertEqual(bytes(settings.value("SettingsWindow/geometry").data()), b"\x01\xd9\xd0\xcb\x00\x03")
+        self.assertFalse(configs[2].exists())
 
     def test_changed_configuration_rejects_approval_without_overwrite(self):
         self.controller.selectComponent("kitty", True)
