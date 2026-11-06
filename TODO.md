@@ -22,6 +22,15 @@ are one historical example, not the architecture or a required desktop stack.
 
 ## Next complete workflows
 
+The [everyday workflow plan](docs/WORKFLOW.md) defines the next delivery sequence
+and acceptance gates. These are planned, not implemented:
+
+- [ ] Measure launch, browsing, review and activation against explicit daily tasks.
+- [ ] Separate applied, draft and last-viewed state; keep the latest preview request.
+- [ ] Deliver keyboard-first daily browsing, search/random, concise exact review and direct reviewed undo.
+- [ ] Add reviewed application-menu registration, repair/removal and single-instance activation.
+- [ ] Report per-integration activation state and validate any explicit reload capability separately.
+
 - [x] Build the GUI: inventory, color-source inspection, explicit replacement/link choices,
       previews, exact review, approval, standalone export, undo and recovery.
 - [ ] MCP interface for agents, followed by a small fallback CLI over the shared engine.
