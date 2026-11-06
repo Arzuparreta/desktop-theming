@@ -70,6 +70,11 @@ session reload is included. Probing never changes the wallpaper.
 
 ## Next outcomes
 
+The proposed [everyday workflow delivery plan](WORKFLOW.md) prioritizes fast
+daily access, responsive browsing and review, clear applied/draft/runtime states,
+and deliberate activation. It separates repeated theme changes from initial
+composition while retaining the safety requirements above.
+
 1. Add named profile composition and verification in real application sessions.
 2. Expand conservative configuration parsing and application-specific style coverage.
 3. Extend wallpaper coverage to additional protocols and session versions,
