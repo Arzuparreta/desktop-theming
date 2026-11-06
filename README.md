@@ -9,6 +9,8 @@ A modular Linux desktop theming engine. It discovers an existing desktop,
 inspects appearance settings and prepares reversible theme changes while
 preserving unrelated preferences.
 
+![Desktop Theming showing the catana-verde-ascii wallpaper and its generated palette](docs/screenshots/appearance.png)
+
 **Current state:** a local PySide6 / Qt Quick application over the Python engine.
 Choose a palette, inspect components and color sources, review exact changes,
 apply, disconnect, export, undo and recover without configuration commands.
