@@ -132,7 +132,7 @@ class GuiTests(unittest.TestCase):
         self.app.processEvents()
 
     def settle(self):
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + getattr(self, "operation_timeout", 10)
         while not self.controller.idle:
             self.app.processEvents()
             QTest.qWait(10)
@@ -188,6 +188,32 @@ class GuiTests(unittest.TestCase):
         self.click("approveChanges")
         self.assertFalse(self.controller.state["error"])
         self.assertTrue(self.paths.profile.exists())
+
+    def test_component_rows_follow_activity_and_availability_after_every_publication(self):
+        from desktop_theming import presentation
+
+        components = self.controller.state["overview"]["components"]
+        self.assertEqual(components, presentation.order_components(components))
+        # Contradictory PATH/process evidence remains visible; observed use wins.
+        updated = [dict(item, installed=False, running=False, current_session=False) for item in components]
+        for item in updated:
+            if item["id"] == "rofi":
+                item["running"] = True
+            elif item["id"] == "kitty":
+                item["installed"] = True
+        self.controller.publish(overview=dict(self.controller.state["overview"], components=updated))
+        self.app.processEvents()
+        ordered = self.controller.state["overview"]["components"]
+        self.assertEqual([item["id"] for item in ordered[:2]], ["rofi", "kitty"])
+        self.window.setProperty("page", 1)
+        self.app.processEvents()
+        self.assertLess(self.control("connect-rofi").mapToScene(QPoint(0, 0)).y(),
+                        self.control("connect-kitty").mapToScene(QPoint(0, 0)).y())
+        before = [item["id"] for item in ordered]
+        self.controller.selectComponent("kitty", True)
+        self.settle()
+        self.assertEqual([item["id"] for item in self.controller.state["overview"]["components"]], before)
+        self.assertEqual(self.messages, [])
 
     def test_initial_discovery_preview_and_qml_are_read_only(self):
         self.assertTrue(self.control("setDesktopWallpaper").property("checked"))
@@ -528,6 +554,8 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.messages, [])
 
     def test_six_new_application_integrations_review_and_apply_from_the_window(self):
+        # This fixture applies six adapters, including native settings, in one task.
+        self.operation_timeout = 30
         from test_terminal_appearance import INITIAL, UUID
 
         rc = self.paths.config / "konsolerc"

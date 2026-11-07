@@ -5,6 +5,20 @@ from pathlib import Path
 from . import appearance, changes, integrations, inventory
 
 
+def order_components(components):
+    """Prioritize observed use, then PATH availability, with stable tie breaks.
+
+    Keep unknown/unavailable states distinct in their existing evidence labels.
+    Selections never affect ordering, so clicking a checkbox cannot move its row.
+    """
+    def key(component):
+        group = (0 if component.get("running") or component.get("current_session") else
+                 1 if component.get("installed") is True else 2)
+        return (group, component.get("category", "").casefold(), component["name"].casefold(), component["id"])
+
+    return sorted(components, key=key)
+
+
 def connection(paths, component, *, discovered=None):
     """Explain decisions before selecting an integration. Never grants permission."""
     if component not in inventory.SUPPORTED:

@@ -57,7 +57,15 @@ def exercise_integrations(paths):
     konsole.parent.mkdir(parents=True, exist_ok=True)
     konsole.write_text("[General]\nName=Smoke\n[Appearance]\nFont=monospace,12\n")
     (paths.config / "konsolerc").write_text("[Desktop Entry]\nDefaultProfile=Smoke.profile\n")
+    rofi_config = paths.config / "rofi/config.rasi"
+    rofi_theme = paths.config / "rofi/themes/bundled-example.rasi"
+    rofi_theme.parent.mkdir(parents=True, exist_ok=True)
+    rofi_original = 'configuration { font: "monospace 13"; }\n@theme "bundled-example"\n'
+    rofi_source = 'window { width: 40em; }\nelement.alternate.normal { background-color: white; text-color: white; }\n'
+    rofi_config.write_text(rofi_original)
+    rofi_theme.write_text(rofi_source)
     profile = dict(service.DEFAULT_PROFILE, components=sorted(integrations.FILES),
+                   resolutions={"rofi": {"replace_colors": True}},
                    mode="safe", wallpaper=str(paths.home / "images #1/a #1.png"))
     initial = service.apply_reviewed(paths, service.make_plan(paths, profile))
     if not all(inventory.managed(paths, component) for component in integrations.FILES):
@@ -71,6 +79,8 @@ def exercise_integrations(paths):
     updated = service.apply_reviewed(paths, service.make_plan(paths, update))
     changes.undo(paths, updated["id"], reviewed=changes.review_undo(paths, updated["id"]))
     disconnected = service.apply_reviewed(paths, service.make_plan(paths, service.DEFAULT_PROFILE))
+    if rofi_config.read_text() != rofi_original or rofi_theme.read_text() != rofi_source:
+        raise ValueError("Bundled Rofi import/undo changed the original theme or preferences")
     if polybar.read_text() != original:
         raise ValueError("Bundled adapter disconnection lost original preferences")
     changes.undo(paths, disconnected["id"])
