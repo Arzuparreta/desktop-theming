@@ -455,7 +455,7 @@ ApplicationWindow {
                 ColumnLayout {
                     width: parent.width
                     spacing: 0
-                    Body { Layout.fillWidth: true; text: "Choose which applications use this palette. Changes are applied only after review."; bottomPadding: 20 }
+                    Body { Layout.fillWidth: true; text: "Choose which applications use this palette. Running components appear first, then available applications. Changes are applied only after review."; bottomPadding: 20 }
                     Repeater {
                         model: s.overview.components.filter(c => c.supported || showAllComponents || c.installed || c.running || c.configs.some(f => f.exists))
                         ColumnLayout {

@@ -25,6 +25,27 @@ class PresentationTests(unittest.TestCase):
         target.write_text(text)
         return target
 
+    def test_component_order_prioritizes_use_then_availability_without_changing_evidence(self):
+        components = [
+            {"id": "missing", "name": "A missing", "category": "Terminal", "installed": False, "running": False},
+            {"id": "available-z", "name": "zsh", "category": "Shell", "installed": True, "running": False},
+            {"id": "unknown", "name": "GTK", "category": "Applications", "installed": None, "running": False},
+            {"id": "running", "name": "Kitty", "category": "Terminal", "installed": True, "running": True},
+            {"id": "session", "name": "Sway", "category": "Session", "installed": False, "running": False, "current_session": True},
+            {"id": "available-a", "name": "fish", "category": "Shell", "installed": True, "running": False},
+            {"id": "outside-path", "name": "Rofi", "category": "Launcher", "installed": False, "running": True},
+        ]
+        original = [dict(item) for item in components]
+        ordered = presentation.order_components(components)
+        self.assertEqual([item["id"] for item in ordered],
+                         ["outside-path", "session", "running", "available-a", "available-z", "unknown", "missing"])
+        self.assertEqual(components, original)
+        self.assertIsNone(next(item for item in ordered if item["id"] == "unknown")["installed"])
+        for item in components:
+            item["selected"] = True
+        self.assertEqual([item["id"] for item in presentation.order_components(reversed(components))],
+                         [item["id"] for item in ordered])
+
     def test_regular_configuration_needs_no_link_permission(self):
         self.write("kitty/kitty.conf", "font_size 15\n")
         info = presentation.connection(self.paths, "kitty")

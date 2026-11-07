@@ -132,7 +132,7 @@ class GuiTests(unittest.TestCase):
         self.app.processEvents()
 
     def settle(self):
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + getattr(self, "operation_timeout", 10)
         while not self.controller.idle:
             self.app.processEvents()
             QTest.qWait(10)
@@ -188,6 +188,32 @@ class GuiTests(unittest.TestCase):
         self.click("approveChanges")
         self.assertFalse(self.controller.state["error"])
         self.assertTrue(self.paths.profile.exists())
+
+    def test_component_rows_follow_activity_and_availability_after_every_publication(self):
+        from desktop_theming import presentation
+
+        components = self.controller.state["overview"]["components"]
+        self.assertEqual(components, presentation.order_components(components))
+        # Contradictory PATH/process evidence remains visible; observed use wins.
+        updated = [dict(item, installed=False, running=False, current_session=False) for item in components]
+        for item in updated:
+            if item["id"] == "rofi":
+                item["running"] = True
+            elif item["id"] == "kitty":
+                item["installed"] = True
+        self.controller.publish(overview=dict(self.controller.state["overview"], components=updated))
+        self.app.processEvents()
+        ordered = self.controller.state["overview"]["components"]
+        self.assertEqual([item["id"] for item in ordered[:2]], ["rofi", "kitty"])
+        self.window.setProperty("page", 1)
+        self.app.processEvents()
+        self.assertLess(self.control("connect-rofi").mapToScene(QPoint(0, 0)).y(),
+                        self.control("connect-kitty").mapToScene(QPoint(0, 0)).y())
+        before = [item["id"] for item in ordered]
+        self.controller.selectComponent("kitty", True)
+        self.settle()
+        self.assertEqual([item["id"] for item in self.controller.state["overview"]["components"]], before)
+        self.assertEqual(self.messages, [])
 
     def test_initial_discovery_preview_and_qml_are_read_only(self):
         self.assertTrue(self.control("setDesktopWallpaper").property("checked"))
@@ -525,6 +551,65 @@ class GuiTests(unittest.TestCase):
         self.controller.renderExport("alacritty")
         self.settle()
         self.assertIn("[colors.primary]", self.controller.state["exportText"])
+        self.assertEqual(self.messages, [])
+
+    def test_six_new_application_integrations_review_and_apply_from_the_window(self):
+        # This fixture applies six adapters, including native settings, in one task.
+        self.operation_timeout = 30
+        from test_terminal_appearance import INITIAL, UUID
+
+        rc = self.paths.config / "konsolerc"
+        rc.parent.mkdir(parents=True, exist_ok=True)
+        rc.write_text("[Desktop Entry]\nDefaultProfile=Personal.profile\n")
+        profile_file = self.paths.data / "konsole/Personal.profile"
+        profile_file.parent.mkdir(parents=True)
+        profile_file.write_text("[General]\nName=Personal\n[Appearance]\nFont=monospace,13\nColorScheme=Breeze\n")
+        values = json.loads(json.dumps(INITIAL))
+
+        def command(args):
+            if args[2] == "org.gnome.Terminal.ProfilesList":
+                return repr(UUID if args[3] == "default" else [UUID])
+            if args[1] == "list-keys":
+                return "\n".join(values)
+            if args[1] == "writable":
+                return "true"
+            if args[1] == "get":
+                return repr(values[args[3]])
+            if args[1] == "set":
+                values[args[3]] = json.loads(args[4])
+                return ""
+            raise AssertionError(args)
+
+        with patch.dict(os.environ, DBUS_SESSION_BUS_ADDRESS="unix:path=/private-gui-test-bus", T3CODE_HOME=""), patch(
+                "desktop_theming.appearance.command", side_effect=command):
+            self.controller.refresh()
+            self.settle()
+            self.window.setProperty("page", 1)
+            for component in ("konsole", "gnome-terminal", "vscode", "btop", "tmux", "t3code"):
+                self.click("connect-" + component)
+                if self.controller.state["connection"]:
+                    self.assertFalse(self.controller.state["connection"]["blocked"])
+                    if self.controller.state["connection"]["existingColors"]:
+                        self.click("allowReplaceColors")
+                    self.click("confirmConnection")
+                self.assertIn(component, self.controller.state["profile"]["components"])
+            self.assertFalse(self.paths.profile.exists())
+            self.assertEqual(values, INITIAL)
+            self.click("reviewChanges")
+            self.assertFalse(self.controller.state["error"])
+            self.assertTrue(self.controller.state["review"]["changes"])
+            self.click("approveChanges")
+            self.assertFalse(self.controller.state["error"])
+            self.assertFalse(values["use-theme-colors"])
+            self.assertEqual(json.loads((self.paths.home / ".t3/userdata/settings.json").read_text())["defaultTheme"],
+                             "desktop-theming")
+            self.assertIn("Font=monospace,13", profile_file.read_text())
+            self.controller.reviewUndo(self.controller.state["overview"]["history"][0]["id"], False)
+            self.settle()
+            self.click("approveChanges")
+            self.assertEqual(values, INITIAL)
+            self.assertIn("ColorScheme=Breeze", profile_file.read_text())
+            self.assertFalse((self.paths.home / ".t3/userdata/settings.json").exists())
         self.assertEqual(self.messages, [])
 
     def test_native_preferences_have_reviewed_values_apply_and_undo_in_the_window(self):

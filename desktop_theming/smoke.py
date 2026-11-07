@@ -24,7 +24,8 @@ def isolated_environment(*, x11=False):
                       XDG_STATE_HOME=str(root / "state"), XDG_CACHE_HOME=str(root / "cache"),
                       XDG_RUNTIME_DIR=str(root / "runtime"), PATH=str(binaries),
                       QT_QPA_PLATFORM="xcb" if x11 else "offscreen",
-                      QT_QUICK_BACKEND="rhi" if x11 else "software", ZDOTDIR="")
+                      QT_QUICK_BACKEND="rhi" if x11 else "software", ZDOTDIR="", T3CODE_HOME=str(root / ".t3"),
+                      DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent-desktop-smoke-bus")
     if x11:
         os.environ["QSG_RHI_BACKEND"] = "opengl"
     (root / "runtime").mkdir(mode=0o700)
@@ -52,7 +53,19 @@ def exercise_integrations(paths):
     polybar.parent.mkdir(parents=True, exist_ok=True)
     original = "[bar/test]\nmodules-left=clock\n[module/clock]\ntype=internal/date\n"
     polybar.write_text(original)
+    konsole = paths.data / "konsole/Smoke.profile"
+    konsole.parent.mkdir(parents=True, exist_ok=True)
+    konsole.write_text("[General]\nName=Smoke\n[Appearance]\nFont=monospace,12\n")
+    (paths.config / "konsolerc").write_text("[Desktop Entry]\nDefaultProfile=Smoke.profile\n")
+    rofi_config = paths.config / "rofi/config.rasi"
+    rofi_theme = paths.config / "rofi/themes/bundled-example.rasi"
+    rofi_theme.parent.mkdir(parents=True, exist_ok=True)
+    rofi_original = 'configuration { font: "monospace 13"; }\n@theme "bundled-example"\n'
+    rofi_source = 'window { width: 40em; }\nelement.alternate.normal { background-color: white; text-color: white; }\n'
+    rofi_config.write_text(rofi_original)
+    rofi_theme.write_text(rofi_source)
     profile = dict(service.DEFAULT_PROFILE, components=sorted(integrations.FILES),
+                   resolutions={"rofi": {"replace_colors": True}},
                    mode="safe", wallpaper=str(paths.home / "images #1/a #1.png"))
     initial = service.apply_reviewed(paths, service.make_plan(paths, profile))
     if not all(inventory.managed(paths, component) for component in integrations.FILES):
@@ -66,6 +79,8 @@ def exercise_integrations(paths):
     updated = service.apply_reviewed(paths, service.make_plan(paths, update))
     changes.undo(paths, updated["id"], reviewed=changes.review_undo(paths, updated["id"]))
     disconnected = service.apply_reviewed(paths, service.make_plan(paths, service.DEFAULT_PROFILE))
+    if rofi_config.read_text() != rofi_original or rofi_theme.read_text() != rofi_source:
+        raise ValueError("Bundled Rofi import/undo changed the original theme or preferences")
     if polybar.read_text() != original:
         raise ValueError("Bundled adapter disconnection lost original preferences")
     changes.undo(paths, disconnected["id"])
