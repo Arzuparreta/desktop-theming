@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import changes, integrations, wallpaper
 
-COMPONENTS = {"gnome", "xfce"}
+COMPONENTS = {"gnome", "xfce", "gnome-terminal"}
 ACCENTS = {"blue": "3584e4", "teal": "2190a4", "green": "3a944a", "yellow": "c88800",
            "orange": "ed5b00", "red": "e62d42", "pink": "d56199", "purple": "9141ac",
            "slate": "6f8396"}
@@ -24,14 +24,20 @@ def command(args):
 def active(component):
     from . import inventory
 
+    if component == "gnome-terminal":
+        return bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS"))
     current = inventory.session()
     desktop = (current["desktop"] if current["desktop"] != "Unknown" else current["name"]).lower().split(":")
     return component in desktop or component == "xfce" and "xfce4" in desktop
 
 
 def read(action):
-    if action["backend"] == "gnome":
-        return {key: ast.literal_eval(command([action["tool"], "get", action["schema"], key]))
+    if action["backend"] == "gnome-terminal":
+        uuid = terminal_profile(action["tool"])
+        if uuid != action["profile_uuid"]:
+            raise ValueError("GNOME Terminal default profile changed; return to the reviewed profile before updating or undoing.")
+    if action["backend"] in ("gnome", "gnome-terminal"):
+        return {key: native_value(command([action["tool"], "get", action["schema"], key]))
                 for key in action["before"]}
     if action["backend"] == "xfce":
         from . import inventory
@@ -53,7 +59,7 @@ def check(action, expected, *, partial=False):
 
 
 def write(action, key, value):
-    if action["backend"] == "gnome":
+    if action["backend"] in ("gnome", "gnome-terminal"):
         command([action["tool"], "set", action["schema"], key, json.dumps(value)])
     else:
         command([action["tool"], "-c", "xsettings", "-p", key, "-s", value])
@@ -89,11 +95,13 @@ def probe(paths, component, value, *, which=None):
     if not active(component):
         raise ValueError(f"{component} appearance requires its active desktop session; availability alone is insufficient.")
     which = which or shutil.which
-    tool = which("gsettings" if component == "gnome" else "xfconf-query")
+    tool = which("gsettings" if component in ("gnome", "gnome-terminal") else "xfconf-query")
     if not tool:
         raise ValueError("The native appearance settings tool is unavailable. No packages have been installed.")
     action = {"backend": component, "tool": tool, "session": wallpaper.session_token(), "before": {}}
     dark = value["polarity"] == "dark"
+    if component == "gnome-terminal":
+        return terminal_probe(action, value)
     if component == "gnome":
         action["schema"] = "org.gnome.desktop.interface"
         keys = command([tool, "list-keys", action["schema"]]).splitlines()
@@ -180,7 +188,8 @@ def plan(paths, component, value, options, *, remove=False, which=None):
     if not record and not options.get("replace_colors"):
         raise ValueError(f"Explicitly authorize replacing {component}'s native appearance preferences.")
     action = probe(paths, component, value, which=which)
-    if record and set(action["before"]) != set(record["action"]["after"]):
+    if record and (set(action["before"]) != set(record["action"]["after"])
+                   or action.get("schema") != record["action"].get("schema")):
         raise ValueError("Native appearance capabilities changed; disconnect before reconnecting.")
     original = record["action"]["before"] if record else action["before"]
     owned = dict(action, before=original)
@@ -194,5 +203,47 @@ def plan(paths, component, value, options, *, remove=False, which=None):
 
 def describe(action, *, reverse=False):
     before, after = (action["after"], action["before"]) if reverse else (action["before"], action["after"])
-    return {"path": "Desktop appearance", "label": f"Desktop appearance ({action['backend']})",
+    return {"path": "Desktop appearance", "label": f"Appearance ({action['backend']})",
             "diff": json.dumps(before, indent=2) + "\n→\n" + json.dumps(after, indent=2)}
+
+
+TERMINAL_LIST_SCHEMA = "org.gnome.Terminal.ProfilesList"
+
+
+def terminal_profile(tool):
+    uuid = native_value(command([tool, "get", TERMINAL_LIST_SCHEMA, "default"]))
+    profiles = native_value(command([tool, "get", TERMINAL_LIST_SCHEMA, "list"]))
+    if (not isinstance(uuid, str) or not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", uuid)
+            or not isinstance(profiles, list) or uuid not in profiles):
+        raise ValueError("GNOME Terminal needs an existing default profile; no profiles are created automatically.")
+    return uuid
+
+
+def terminal_probe(action, value):
+    tool = action["tool"]
+    uuid = terminal_profile(tool)
+    schema = "org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:" + uuid + "/"
+    c = integrations.colors(value)
+    after = {"use-theme-colors": False, "background-color": c["bg"], "foreground-color": c["fg"],
+             "palette": [value["colors"][f"color{i}"] for i in range(16)],
+             "bold-color-same-as-fg": True, "cursor-colors-set": True,
+             "cursor-background-color": c["cursor"], "cursor-foreground-color": c["bg"],
+             "highlight-colors-set": True, "highlight-background-color": c["accent"],
+             "highlight-foreground-color": c["bg"]}
+    keys = command([tool, "list-keys", schema]).splitlines()
+    if not set(after) <= set(keys):
+        raise ValueError("This GNOME Terminal version does not expose all required palette preferences.")
+    for key in after:
+        if command([tool, "writable", schema, key]) != "true":
+            raise ValueError(f"GNOME Terminal preference {key} is locked.")
+    action = dict(action, schema=schema, profile_uuid=uuid, before=dict.fromkeys(after))
+    return dict(action, before=read(action), after=after)
+
+
+def native_value(text):
+    if text in ("true", "false"):
+        return text == "true"
+    try:
+        return ast.literal_eval(text.removeprefix("@as "))
+    except (SyntaxError, ValueError) as exc:
+        raise ValueError("Unsupported native settings value; resolve it before connecting.") from exc

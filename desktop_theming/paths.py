@@ -21,6 +21,11 @@ class Paths:
                    xdg("XDG_STATE_HOME", home / ".local/state"))
 
     @property
+    def data(self):
+        value = os.environ.get("XDG_DATA_HOME", "")
+        return Path(value) if value and Path(value).is_absolute() else self.home / ".local/share"
+
+    @property
     def profile(self):
         return self.config / "desktop-theming/profile.json"
 

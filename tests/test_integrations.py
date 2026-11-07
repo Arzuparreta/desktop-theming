@@ -13,6 +13,11 @@ from desktop_theming import changes, formats, integrations, inventory, presentat
 from desktop_theming.paths import Paths
 
 EXAMPLES = {
+    "konsole": "[Desktop Entry]\nDefaultProfile=Personal.profile\n",
+    "vscode": '{// Keep my font\n "editor.fontSize": 15, "workbench.colorCustomizations": {"editor.background": "#123456", "custom.color": "#fedcba"},\n}\n',
+    "btop": '# My layout\ncolor_theme="Default"\nshown_boxes="cpu mem proc"\n',
+    "tmux": 'set -g status-left "my session"\nbind r display-message "kept"\n',
+    "t3code": '{"defaultTheme":"dark","defaultThemeSetAt":"before", "defaultThreadEnvMode":"auto"}\n',
     "alacritty": '# My terminal\n[font]\nsize = 13.5\n[colors.primary]\nbackground = "#123456"\n',
     "foot": "# My terminal\nfont=monospace:size=13\n[colors]\nbackground=123456\n",
     "i3": "# My bindings\nset $mod Mod4\nbindsym $mod+Return exec kitty\nclient.focused #123456 #123456 #ffffff\n",
@@ -41,7 +46,7 @@ class IntegrationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.paths = Paths(self.root, self.root / "config", self.root / "state")
         env = patch.dict(os.environ, HOME=str(self.root), XDG_CONFIG_HOME=str(self.paths.config),
-                         XDG_STATE_HOME=str(self.paths.state), ZDOTDIR="", XDG_CURRENT_DESKTOP="test")
+                         XDG_STATE_HOME=str(self.paths.state), XDG_DATA_HOME="", T3CODE_HOME="", ZDOTDIR="", XDG_CURRENT_DESKTOP="test")
         env.start()
         self.addCleanup(env.stop)
         self.profile = dict(copy.deepcopy(service.DEFAULT_PROFILE), mode="safe")
@@ -51,6 +56,13 @@ class IntegrationTests(unittest.TestCase):
         return "/native/" + command
 
     def seed(self, component):
+        if component == "konsole":
+            config = self.paths.config / "konsolerc"
+            config.parent.mkdir(parents=True, exist_ok=True)
+            config.write_text(EXAMPLES[component])
+            profile = self.paths.data / "konsole/Personal.profile"
+            profile.parent.mkdir(parents=True, exist_ok=True)
+            profile.write_text("[General]\nName=Personal\n[Appearance]\nFont=monospace,12\nColorScheme=Breeze\n")
         files = integrations.targets(self.paths, component)
         path = files[0]
         path.parent.mkdir(parents=True, exist_ok=True)
