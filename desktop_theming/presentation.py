@@ -83,6 +83,12 @@ def review_level(paths, plan, previous):
 def activation_guidance(profile):
     """Configured state is known; runtime appearance is never inferred from a file."""
     instructions = {
+        "konsole": "Reopen Konsole to load the colors in its default user profile.",
+        "gnome-terminal": "The default GNOME Terminal profile was configured; existing terminals may update immediately.",
+        "vscode": "VS Code may notice the user color settings immediately. Workspace and named-profile overrides can take precedence.",
+        "btop": "Reopen btop or select desktop-theming in its theme menu.",
+        "tmux": "Use tmux's own source-file action on your configuration yourself, or start a new server. Existing window/session options may override these defaults.",
+        "t3code": "T3 Code watches its native theme files and environment default. Connected web/desktop clients may follow immediately; mobile keeps its own appearance.",
         "rofi": "Open Rofi again to read its saved colors.",
         "wofi": "Open Wofi again to read its saved colors.",
         "alacritty": "Live update depends on live_config_reload; otherwise reopen Alacritty.",

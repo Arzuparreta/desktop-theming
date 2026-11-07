@@ -527,6 +527,63 @@ class GuiTests(unittest.TestCase):
         self.assertIn("[colors.primary]", self.controller.state["exportText"])
         self.assertEqual(self.messages, [])
 
+    def test_six_new_application_integrations_review_and_apply_from_the_window(self):
+        from test_terminal_appearance import INITIAL, UUID
+
+        rc = self.paths.config / "konsolerc"
+        rc.parent.mkdir(parents=True, exist_ok=True)
+        rc.write_text("[Desktop Entry]\nDefaultProfile=Personal.profile\n")
+        profile_file = self.paths.data / "konsole/Personal.profile"
+        profile_file.parent.mkdir(parents=True)
+        profile_file.write_text("[General]\nName=Personal\n[Appearance]\nFont=monospace,13\nColorScheme=Breeze\n")
+        values = json.loads(json.dumps(INITIAL))
+
+        def command(args):
+            if args[2] == "org.gnome.Terminal.ProfilesList":
+                return repr(UUID if args[3] == "default" else [UUID])
+            if args[1] == "list-keys":
+                return "\n".join(values)
+            if args[1] == "writable":
+                return "true"
+            if args[1] == "get":
+                return repr(values[args[3]])
+            if args[1] == "set":
+                values[args[3]] = json.loads(args[4])
+                return ""
+            raise AssertionError(args)
+
+        with patch.dict(os.environ, DBUS_SESSION_BUS_ADDRESS="unix:path=/private-gui-test-bus", T3CODE_HOME=""), patch(
+                "desktop_theming.appearance.command", side_effect=command):
+            self.controller.refresh()
+            self.settle()
+            self.window.setProperty("page", 1)
+            for component in ("konsole", "gnome-terminal", "vscode", "btop", "tmux", "t3code"):
+                self.click("connect-" + component)
+                if self.controller.state["connection"]:
+                    self.assertFalse(self.controller.state["connection"]["blocked"])
+                    if self.controller.state["connection"]["existingColors"]:
+                        self.click("allowReplaceColors")
+                    self.click("confirmConnection")
+                self.assertIn(component, self.controller.state["profile"]["components"])
+            self.assertFalse(self.paths.profile.exists())
+            self.assertEqual(values, INITIAL)
+            self.click("reviewChanges")
+            self.assertFalse(self.controller.state["error"])
+            self.assertTrue(self.controller.state["review"]["changes"])
+            self.click("approveChanges")
+            self.assertFalse(self.controller.state["error"])
+            self.assertFalse(values["use-theme-colors"])
+            self.assertEqual(json.loads((self.paths.home / ".t3/userdata/settings.json").read_text())["defaultTheme"],
+                             "desktop-theming")
+            self.assertIn("Font=monospace,13", profile_file.read_text())
+            self.controller.reviewUndo(self.controller.state["overview"]["history"][0]["id"], False)
+            self.settle()
+            self.click("approveChanges")
+            self.assertEqual(values, INITIAL)
+            self.assertIn("ColorScheme=Breeze", profile_file.read_text())
+            self.assertFalse((self.paths.home / ".t3/userdata/settings.json").exists())
+        self.assertEqual(self.messages, [])
+
     def test_native_preferences_have_reviewed_values_apply_and_undo_in_the_window(self):
         values = {"color-scheme": "default"}
 
