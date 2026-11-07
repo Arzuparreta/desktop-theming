@@ -479,10 +479,10 @@ def build_safe(an, polarity):
     return _finish(bg, fg, ansi, dim_seed, accent, polarity, "safe")
 
 
-def build(image, mode, polarity):
+def build(image, mode, polarity, *, analysis=None):
     """Returns (scheme, fallback_reason or None)."""
     try:
-        an = Analysis(image)
+        an = analysis if analysis is not None else Analysis(image)
     except Exception as e:  # unreadable image: safe theme, untinted
         return build_safe(None, polarity), f"no se pudo analizar la imagen ({e})"
     if mode == "safe":

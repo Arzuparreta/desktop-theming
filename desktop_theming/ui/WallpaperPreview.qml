@@ -7,15 +7,17 @@ ColumnLayout {
     property url source
     property real availableHeight: 600
     property bool fill: false
+    property real minimumCanvasHeight: 160
+    property string objectPrefix: "wallpaperPreview"
     spacing: 6
 
     Item {
         Layout.fillWidth: true
         // Keep a desktop-shaped canvas without letting a wide/short window
         // push all the controls away. The surrounding ScrollView handles overflow.
-        implicitHeight: Math.min(width * 9 / 16, Math.max(160, preview.availableHeight * 0.65))
+        implicitHeight: Math.min(width * 9 / 16, Math.max(preview.minimumCanvasHeight, preview.availableHeight * 0.65))
         Rectangle {
-            objectName: "wallpaperPreviewFrame"
+            objectName: preview.objectPrefix + "Frame"
             anchors.centerIn: parent
             width: Math.min(parent.width, parent.height * 16 / 9)
             height: width * 9 / 16
@@ -23,9 +25,10 @@ ColumnLayout {
             clip: true
             Image {
                 id: image
-                objectName: "wallpaperPreviewImage"
+                objectName: preview.objectPrefix + "Image"
                 anchors.fill: parent
                 source: preview.source
+                visible: status === Image.Ready
                 fillMode: preview.fill ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                 horizontalAlignment: Image.AlignHCenter
                 verticalAlignment: Image.AlignVCenter
@@ -55,14 +58,14 @@ ColumnLayout {
         visible: !!preview.source.toString()
         Body { text: "Preview"; font.pixelSize: 11 }
         Command {
-            objectName: "wallpaperPreviewFit"
+            objectName: preview.objectPrefix + "Fit"
             text: "Fit"
             primary: !preview.fill
             onClicked: preview.fill = false
             Accessible.description: "Show the entire image; only affects this preview"
         }
         Command {
-            objectName: "wallpaperPreviewFill"
+            objectName: preview.objectPrefix + "Fill"
             text: "Fill"
             primary: preview.fill
             onClicked: preview.fill = true

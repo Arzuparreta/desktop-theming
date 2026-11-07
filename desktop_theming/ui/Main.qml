@@ -9,7 +9,15 @@ ApplicationWindow {
     readonly property var s: controller.state
     readonly property var imageFolder: controller.imageFolder
     readonly property int folderImageCount: imageList.count
+    property bool dailyMode: false
     property int page: 0
+    readonly property bool canNavigate: !s.busy && s.loaded && !reviewDialog.visible && !inspector.visible && !exportDialog.visible && !connectionDialog.visible && !accessDialog.visible && !activationDialog.visible && !wallpaperPicker.visible && !folderPicker.visible && !exportPicker.visible
+    function setDailyMode(enabled) {
+        dailyMode = enabled
+        page = 0
+        if (enabled && canNavigate) Qt.callLater(dailyView.focusSearch)
+    }
+    Component.onCompleted: if (dailyMode) { width = 900; Qt.callLater(dailyView.focusSearch) }
     property var inspected: ({})
     property int diffIndex: 0
     property bool showAllComponents: false
@@ -36,7 +44,7 @@ ApplicationWindow {
     palette.buttonText: "#e7e7eb"
     palette.highlight: "#cad8cb"
     palette.highlightedText: "#17191d"
-    onClosing: function(close) { if (s.busy) close.accepted = false }
+    onClosing: function(close) { if (s.busy) { close.accepted = false; controller.explainBusyClose() } }
 
     function openWallpaperPicker() { if (controller.navigationFolderUrl) wallpaperPicker.currentFolder = controller.navigationFolderUrl; wallpaperPicker.open() }
     function closeWallpaperPicker() { wallpaperPicker.close() }
@@ -74,7 +82,8 @@ ApplicationWindow {
         case "folder": openFolderPicker(); break
         case "save": exportPicker.open(); break
         case "review": controller.review(); break
-        case "history": page = 2; break
+        case "history": dailyMode = false; page = 2; break
+        case "access": controller.refreshLauncher(); accessDialog.open(); break
         default: controller.refresh()
         }
     }
@@ -88,8 +97,15 @@ ApplicationWindow {
             if (!s.review.kind && reviewDialog.visible) reviewDialog.close()
         }
     }
-    Shortcut { sequence: "Ctrl+Return"; enabled: !s.busy && s.loaded && !reviewDialog.visible && !inspector.visible && !exportDialog.visible && !connectionDialog.visible; onActivated: controller.review() }
-    Shortcut { sequence: "Ctrl+R"; enabled: !s.busy && !reviewDialog.visible && !inspector.visible && !exportDialog.visible && !connectionDialog.visible; onActivated: controller.refresh() }
+    Shortcut { sequence: "Ctrl+Return"; enabled: window.canNavigate && !recoveryNeeded; onActivated: controller.review() }
+    Shortcut { sequence: "Ctrl+R"; enabled: window.canNavigate && !s.scanning; onActivated: controller.refresh() }
+    Shortcut { sequence: "Ctrl+F"; enabled: window.canNavigate && dailyMode; onActivated: dailyView.focusSearch() }
+    Shortcut { sequence: "Escape"; enabled: window.canNavigate && dailyMode; onActivated: window.close() }
+    Shortcut { sequence: "Ctrl+Shift+R"; enabled: window.canNavigate; onActivated: controller.chooseRandom() }
+    Shortcut { sequence: "Alt+D"; enabled: window.canNavigate; onActivated: controller.setOption("polarity", s.profile.polarity === "dark" ? "light" : "dark") }
+    Shortcut { sequence: "Alt+M"; enabled: window.canNavigate; onActivated: controller.setOption("mode", s.profile.mode === "adaptive" ? "safe" : "adaptive") }
+    Shortcut { sequence: "Ctrl+Z"; enabled: window.canNavigate && !(window.activeFocusItem instanceof TextInput) && !(window.activeFocusItem instanceof TextEdit); onActivated: controller.undoLatest() }
+    Shortcut { sequence: "Alt+Return"; enabled: reviewDialog.visible && !s.busy && (s.review.kind === "undo" || !!s.review.allowEmpty || (s.review.changes || []).length > 0); onActivated: controller.approve() }
     FileDialog {
         id: wallpaperPicker
         objectName: "wallpaperPicker"
@@ -116,23 +132,26 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 28
-        spacing: 20
+        anchors.margins: dailyMode ? 20 : 28
+        spacing: dailyMode ? 12 : 20
         RowLayout {
             Layout.fillWidth: true
             Label { text: "Desktop Theming"; color: "#eeeeef"; font.pixelSize: 21; font.weight: Font.DemiBold }
             Item { Layout.fillWidth: true }
             Body { text: sessionName(); font.pixelSize: 12 }
-            Command { text: "Check desktop"; quiet: true; enabled: !s.busy; onClicked: controller.refresh(); Accessible.description: "Check available applications again; keep your pending choices" }
+            Command { objectName: "dailyToggle"; text: dailyMode ? "Control center" : "Quick view"; quiet: true; enabled: !s.busy; onClicked: setDailyMode(!dailyMode) }
+            Command { text: "Access…"; quiet: true; enabled: !s.busy; onClicked: { controller.refreshLauncher(); accessDialog.open() } }
+            Command { visible: !dailyMode; text: s.scanning ? "Checking…" : "Check desktop"; quiet: true; enabled: !s.busy && !s.scanning; onClicked: controller.refresh(); Accessible.description: "Check available applications again; keep your pending choices" }
         }
         RowLayout {
+            visible: !dailyMode
             spacing: 4
             Repeater {
                 model: ["Appearance", "Components", "History"]
                 Command { required property int index; required property string modelData; text: modelData; quiet: window.page !== index; onClicked: window.page = index }
             }
             Item { Layout.fillWidth: true }
-            Body { visible: s.busy; text: s.activity; color: "#cad8cb"; Accessible.role: Accessible.StaticText }
+            Body { visible: s.busy || s.previewing || s.scanning; text: s.busy ? s.activity : s.previewing ? "Building palette…" : "Checking desktop…"; color: "#cad8cb"; Accessible.role: Accessible.StaticText }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#34363d" }
         Rectangle {
@@ -151,9 +170,11 @@ ApplicationWindow {
                 Body { Layout.fillWidth: true; text: s.error ? s.problem.title || "Something needs attention" : s.notice; color: s.error ? "#f0b8b5" : "#d0dfd1" }
                 Body { visible: !!s.error; Layout.fillWidth: true; text: s.problem.body || "" }
                 RowLayout {
-                    visible: !!s.error
-                    Command { text: s.problem.label || "Check again"; onClicked: handleProblem(); enabled: !s.busy }
-                    Command { text: problemDetails ? "Hide details" : "Show details"; quiet: true; onClicked: problemDetails = !problemDetails }
+                    visible: !!s.error || s.activation.length > 0 || !!latestActive
+                    Command { visible: !!s.error; text: s.problem.label || "Check again"; onClicked: handleProblem(); enabled: !s.busy }
+                    Command { visible: !!s.error; text: problemDetails ? "Hide details" : "Show details"; quiet: true; onClicked: problemDetails = !problemDetails }
+                    Command { visible: !s.error && s.activation.length > 0; text: "Activation status…"; quiet: true; onClicked: activationDialog.open() }
+                    Command { visible: !s.error && !!latestActive; text: "Undo…"; quiet: true; enabled: !s.busy; onClicked: controller.undoLatest() }
                 }
                 Body { visible: !!s.error && problemDetails; Layout.fillWidth: true; text: s.error; font.pixelSize: 12 }
             }
@@ -162,10 +183,17 @@ ApplicationWindow {
             visible: recoveryNeeded
             Layout.fillWidth: true
             Body { Layout.fillWidth: true; text: "An earlier change was interrupted. Recover it before applying another palette."; color: "#e4c793" }
-            Command { text: "Open recovery"; onClicked: page = 2 }
+            Command { text: "Open recovery"; onClicked: { dailyMode = false; page = 2 } }
+        }
+        Body {
+            objectName: "appliedReference"
+            visible: !dailyMode
+            Layout.fillWidth: true
+            text: s.hasApplied ? "Last applied by Desktop Theming: " + (s.applied.wallpaper || "Default palette") + " · " + s.applied.polarity + (s.pending ? " — Preview has unapplied changes" : "") : "No theme applied by Desktop Theming yet. Previewing only."
+            font.pixelSize: 12
         }
         StackLayout {
-            currentIndex: window.page
+            currentIndex: dailyMode && window.page === 0 ? 3 : window.page
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -210,6 +238,14 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 6
                             Body { Layout.fillWidth: true; text: "Folder images · " + folderImageCount; color: "#e7e7eb" }
+                            TextField {
+                                Layout.fillWidth: true
+                                text: imageFolder.query || ""
+                                placeholderText: "Search images…"
+                                enabled: !s.busy
+                                Accessible.name: "Search folder images"
+                                onTextChanged: controller.searchImages(text)
+                            }
                             Label {
                                 Layout.fillWidth: true
                                 text: imageFolder.path
@@ -486,6 +522,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     Body { text: new Date(modelData.created).toLocaleString(Qt.locale(), Locale.ShortFormat); color: "#e7e7eb" }
                                     Body { text: historyStatus(modelData.status) + " · " + modelData.files + " files · " + (modelData.components.join(", ") || "Palette profile"); font.pixelSize: 12 }
+                                    Body { visible: !!modelData.theme; text: modelData.theme ? ((modelData.theme.wallpaper || "Default palette").split("/").pop() + " · " + modelData.theme.polarity + " · " + modelData.theme.effective) : ""; font.pixelSize: 12 }
                                     Body { visible: !pending && modelData.status === "applied" && modelData.id !== latestActive; text: "Undo the more recent changes first."; font.pixelSize: 12 }
                                 }
                                 Command { text: pending ? "Recover…" : "Undo…"; visible: pending || modelData.status === "applied"; enabled: !s.busy && modelData.id === latestActive; onClicked: controller.reviewUndo(modelData.id, pending) }
@@ -494,12 +531,21 @@ ApplicationWindow {
                     }
                 }
             }
+            Daily {
+                id: dailyView
+                controller: window.controller
+                onImageRequested: openWallpaperPicker()
+                onFolderRequested: openFolderPicker()
+                onComponentsRequested: { dailyMode = false; page = 1 }
+                onActivationRequested: activationDialog.open()
+            }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#34363d" }
         RowLayout {
             Layout.fillWidth: true
-            Body { Layout.fillWidth: true; text: s.profile.components.length ? "Use palette in: " + s.profile.components.join(", ") : "No applications selected · palette only"; font.pixelSize: 12 }
-            Command { objectName: "reviewChanges"; text: "Review changes"; primary: true; enabled: !s.busy && s.loaded; onClicked: controller.review() }
+            Command { objectName: "discardDraft"; visible: s.pending; text: "Discard"; quiet: true; enabled: !s.busy; onClicked: controller.discardDraft() }
+            Body { Layout.fillWidth: true; text: dailyMode ? (s.pending ? "Preview changes · not applied" : "No pending changes") : s.profile.components.length ? "Use palette in: " + s.profile.components.join(", ") : "No applications selected · palette only"; font.pixelSize: 12 }
+            Command { objectName: "reviewChanges"; text: s.busy ? s.activity : "Review changes · Ctrl+Enter"; primary: true; enabled: !s.busy && s.loaded && !recoveryNeeded; onClicked: controller.review() }
         }
     }
 
@@ -564,12 +610,14 @@ ApplicationWindow {
         id: reviewDialog
         objectName: "reviewDialog"
         anchors.centerIn: parent
+        readonly property bool routine: s.review.level === "routine"
+        property bool showChanges: false
         width: window.width - 48
-        height: window.height - 48
+        height: routine && !showChanges ? Math.min(420, window.height - 48) : window.height - 48
         modal: true
         closePolicy: s.busy ? Popup.NoAutoClose : Popup.CloseOnEscape
         title: s.review.title || "Review changes"
-        onOpened: technicalNotes.checked = false
+        onOpened: { technicalNotes.checked = false; showChanges = !routine; cancelReviewButton.forceActiveFocus() }
         background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
         onRejected: controller.cancelReview()
         contentItem: ColumnLayout {
@@ -586,8 +634,10 @@ ApplicationWindow {
                     Repeater { model: s.review.summary || []; Body { required property string modelData; text: modelData; Layout.fillWidth: true; font.pixelSize: 12 } }
                 }
             }
+            Command { visible: reviewDialog.routine; text: reviewDialog.showChanges ? "Hide exact changes" : "Show exact changes (" + (s.review.changes || []).length + ")"; quiet: true; onClicked: reviewDialog.showChanges = !reviewDialog.showChanges }
             ComboBox {
                 id: fileSelect
+                visible: reviewDialog.showChanges
                 Layout.fillWidth: true
                 model: s.review.changes || []
                 textRole: "label"
@@ -595,8 +645,9 @@ ApplicationWindow {
                 onActivated: function(index) { diffIndex = index }
                 Accessible.name: "Changed file"
             }
-            Body { Layout.fillWidth: true; text: ((s.review.changes || [])[diffIndex] || ({})).path || ""; font.pixelSize: 11 }
+            Body { visible: reviewDialog.showChanges; Layout.fillWidth: true; text: ((s.review.changes || [])[diffIndex] || ({})).path || ""; font.pixelSize: 11 }
             Code {
+                visible: reviewDialog.showChanges
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 text: ((s.review.changes || [])[diffIndex] || ({})).diff || (s.review.kind === "undo" ? "Files already match their original state. Restore completes recovery by marking this transaction as undone." : "No file changes.")
@@ -606,8 +657,71 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Body { Layout.fillWidth: true; text: (s.review.changes || []).length + " changes · " + (s.review.kind === "undo" ? "Restoration is checked for conflicts" : "You can undo these changes from History"); font.pixelSize: 12 }
-                Command { text: "Cancel"; enabled: !s.busy; onClicked: controller.cancelReview() }
-                Command { objectName: "approveChanges"; text: s.review.kind === "undo" ? "Restore changes" : "Apply changes"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || (s.review.changes || []).length > 0); onClicked: controller.approve() }
+                Command { id: cancelReviewButton; text: "Cancel"; enabled: !s.busy; onClicked: controller.cancelReview() }
+                Command { objectName: "approveChanges"; text: (s.review.kind === "undo" ? "Restore changes" : "Apply changes") + " · Alt+Enter"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || !!s.review.allowEmpty || (s.review.changes || []).length > 0); onClicked: controller.approve() }
+            }
+        }
+    }
+
+    Dialog {
+        id: activationDialog
+        anchors.centerIn: parent
+        width: Math.min(700, window.width - 48)
+        height: Math.min(600, window.height - 48)
+        modal: true
+        title: "Saved configuration and activation"
+        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Body { Layout.fillWidth: true; text: "The files were saved. Desktop Theming has not observed the appearance of these running applications. No application has been signalled or restarted." }
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                contentWidth: availableWidth
+                clip: true
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 12
+                    Repeater {
+                        model: s.activation
+                        ColumnLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Body { text: modelData.name + " · Configuration saved"; color: "#e7e7eb" }
+                            Body { Layout.fillWidth: true; text: modelData.message; font.pixelSize: 12 }
+                        }
+                    }
+                }
+            }
+            Command { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: activationDialog.close() }
+        }
+    }
+
+    Dialog {
+        id: accessDialog
+        objectName: "accessDialog"
+        anchors.centerIn: parent
+        width: Math.min(680, window.width - 48)
+        modal: true
+        title: "Open Desktop Theming your way"
+        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
+        contentItem: ColumnLayout {
+            spacing: 16
+            Body { Layout.fillWidth: true; text: "Add a reversible entry to your application menu. Choose your own shortcut in your desktop’s keyboard settings; no key binding is changed here." }
+            Body { visible: !!s.launcher.error; Layout.fillWidth: true; text: s.launcher.error || ""; color: "#e4c793" }
+            Body { visible: !!s.launcher.repair_needed; Layout.fillWidth: true; text: "The registered executable or menu files need repair. Open this AppImage from its stable location and review Update entry."; color: "#e4c793" }
+            Command { visible: !!s.launcher.interrupted; text: "Recover interrupted menu change…"; onClicked: { accessDialog.close(); controller.recoverLauncher() } }
+            Body { Layout.fillWidth: true; text: "Use Quick view for daily changes, or Control center for applications and recovery. Reopening the app activates its existing window where your desktop allows it." }
+            Code { Layout.fillWidth: true; Layout.preferredHeight: 76; text: s.launcher.command || "Open the AppImage from a stable location to register a menu entry." }
+            RowLayout {
+                Command { text: "Copy quick-view command"; enabled: !!s.launcher.command; onClicked: controller.copyText(s.launcher.command) }
+                Item { Layout.fillWidth: true }
+            }
+            RowLayout {
+                Command { text: "Close"; onClicked: accessDialog.close() }
+                Item { Layout.fillWidth: true }
+                Command { objectName: "removeLauncher"; text: "Remove entry…"; enabled: !s.busy && !!s.launcher.registered; onClicked: { accessDialog.close(); controller.reviewLauncher(true) } }
+                Command { objectName: "registerLauncher"; text: s.launcher.registered ? "Update entry…" : "Add to menu…"; primary: true; enabled: !s.busy && !!s.launcher.available; onClicked: { accessDialog.close(); controller.reviewLauncher(false) } }
             }
         }
     }

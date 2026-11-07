@@ -1,9 +1,38 @@
 # Everyday workflow delivery plan
 
-Status: proposed implementation plan, based on `main` at `1b7ad0a` and a
-read-only UX audit on 2026-11-07. The features below are not delivered yet.
-This planning delivery does not change application behavior or register anything
-in the user's desktop.
+Status: everyday-workflow implementation for source version 0.3.0, following
+the baseline audit at `1b7ad0a` on 2026-11-07. The initial planning record below
+is retained to explain the decisions and remaining acceptance gates.
+
+Implemented: a daily view sharing the full center's state, search/random,
+bounded optional recursive libraries, applied/draft separation, latest-choice
+preview workers, background discovery, shorter routine review, identifiable
+history/direct reviewed undo, explicit reversible menu registration and private
+per-session instance activation. Preview caching is memory-only, content-aware
+and excluded from reviewed plans. Palette generation now analyzes each image
+once. `--measure-startup` reports isolated fixture milestones.
+
+Activation guidance is per integration and explicitly reports runtime appearance
+as unverified. Automatic live reloads, residency/autostart, named profiles and
+real-desktop/p95 performance claims remain outside this delivery. Compositor
+focus and global shortcuts need real-session validation; no Mod+w binding is
+installed. See [the actual user workflow](GUI.md#daily-use).
+
+Validation for this delivery: the full suite completed 234 tests with one
+Rofi/private-Xvfb check skipped because Xvfb is unavailable. The final launcher
+suite additionally covers extract-and-run menu commands (29 tests). Ruff,
+installer/build shell syntax and local documentation links pass. The rebuilt
+AppImage reports 0.3.0 and passes its isolated smoke test, including actual
+bundle registration/removal, private QtNetwork IPC and all 18 native file
+adapters. The runtime's explicit extract-and-run flag is also exercised.
+
+Two independent Opus 5.5 / high implementation reviews reproduced issues in
+display identity, rollback after replacement, slow startup handoff, deferred
+inventory/review/error interaction, cancelled previews and window resizing.
+These were corrected with regression coverage. The bundle check also caught
+and fixed a diagnostic socket-path limit under a long extraction TMPDIR.
+No theme was applied to the developer's desktop. Real compositor focus and
+application appearance remain unverified; the UI says so.
 
 The plan incorporates two independent Claude Opus 5.5 / high analyses: everyday
 interaction and cross-desktop launch/responsiveness. The synthesis chooses one
@@ -21,7 +50,7 @@ The reference is the convenience of the original ThinkPad menu, without its
 personal paths, assumed desktop stack or unrestricted apply hooks. The existing
 [product and safety direction](DIRECTION.md) remains authoritative.
 
-## Findings in the current product
+## Baseline findings before this implementation
 
 - `bin/wallpaper-menu` offers image selection, random selection and the four
   adaptive/safe × dark/light combinations. It shows the current wallpaper and

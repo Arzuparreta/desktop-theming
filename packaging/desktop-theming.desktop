@@ -1,9 +1,21 @@
 [Desktop Entry]
 Type=Application
+Version=1.5
 Name=Desktop Theming
+GenericName=Desktop theme control
 Comment=Compose and review reversible desktop colors
 Exec=desktop-theming
 Icon=desktop-theming
 Categories=Settings;DesktopSettings;
+Keywords=theme;colors;wallpaper;palette;
 Terminal=false
-StartupNotify=true
+StartupNotify=false
+Actions=quick;center;
+
+[Desktop Action quick]
+Name=Quick theme change
+Exec=desktop-theming --quick
+
+[Desktop Action center]
+Name=Control center
+Exec=desktop-theming --center

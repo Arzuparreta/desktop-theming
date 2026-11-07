@@ -17,7 +17,7 @@ def settings(paths):
 def load(paths):
     try:
         store = settings(paths)
-        return {key: store.value(key, "", type=str) for key in ("folder", "wallpaper")}
+        return {key: store.value(key, "", type=str) for key in ("folder", "wallpaper", "recursive")}
     except (OSError, ValueError):
         return {}
 

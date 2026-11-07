@@ -25,14 +25,92 @@ Python 3.11+ is supported. The engine remains usable without Qt.
 replace user launchers. `bin/walltheme` and `install.sh --thinkpad --apply` remain
 an explicitly selected **legacy** workflow. The GUI never calls their apply hooks.
 
-## Workflows
+## Daily use
+
+After a theme has been applied, opening the app starts **Quick view**. First
+use opens the full control center. `--quick` and `--center` explicitly choose
+either view. **Quick view / Control center** switches the same window without
+losing a draft, selected applications or review. There is no resident daemon,
+autostart or tray requirement.
+
+Quick view keeps search, **Random**, dark/light and image/default palette
+controls above the preview. Search matches names and relative paths without
+case sensitivity. Random previews an image from the current matching list,
+excluding the candidate when alternatives exist; it never applies it. Optional
+**Subfolders** browsing skips hidden entries and does not follow linked folders
+recursively. Listing is bounded to 5,000 images, 50,000 entries and 2,048 folders;
+an incomplete library is labelled. Choosing a different folder refreshes it.
+
+The app labels its last applied profile separately from the preview candidate.
+A remembered image can be an unapplied candidate. **Discard** returns to the
+last applied choices. The requested palette option and effective palette are
+shown separately when accessible default colors replace image-derived colors.
+Browsing accepts new choices during palette generation and desktop discovery;
+superseded results cannot replace the latest choice.
+
+**Review changes** always prepares a fresh exact plan. An established, unchanged
+management scope uses a shorter review with **Show exact changes**. New
+connections, disconnections, links, external-edit notices and recovery retain
+the full attention flow. Every plan still needs a separate explicit approval;
+selecting, filtering and cancelling never apply. Undo is directly available in
+Quick view and after application, and opens a conflict-checked reverse review.
+New history entries identify the theme; older journals remain usable.
+
+**Activation status** explains the next action for each configured application.
+It reports saved configuration and explicitly unverified runtime appearance.
+It does not signal, restart or reload applications.
+
+| Key | Action |
+|---|---|
+| Ctrl+F | Focus Quick view search |
+| Arrows, then Enter or Space | Navigate and select an image |
+| Ctrl+Shift+R | Preview a random matching image |
+| Alt+D | Switch dark/light |
+| Alt+M | Switch image/default palette |
+| Ctrl+Enter | Review changes |
+| Alt+Enter | Approve the currently open review |
+| Escape | Cancel a review/dialog; otherwise close Quick view without applying |
+| Ctrl+Z | Review undo, unless a text editor has focus |
+| Ctrl+R | Check the desktop again |
+
+## Application menu and shortcuts
+
+Open **Access…** from an AppImage stored in a permanent location, such as
+`~/Applications/DesktopTheming-x86_64.AppImage`. **Add to menu…** shows exact
+changes before approval: the per-user Desktop Entry, SVG icon and private
+restoration record. Nothing is registered just by opening an AppImage. Source
+launches do not offer registration because they have no stable program file.
+Temporary/extracted/mounted payload paths are refused.
+If the AppImage was opened in extract-and-run mode on a host without FUSE, the
+menu entry preserves that mode. Extraction time remains part of each launch.
+
+The entry has **Quick theme change** and **Control center** actions. **Copy
+quick-view command** provides the command to assign in your desktop's own
+shortcut settings. No particular binding is assumed or changed; Mod+w remains
+an example from the legacy personal setup. Most application menus notice new
+entries automatically; some require reopening the menu or another login.
+
+Replacing the AppImage at the same path keeps the entry working. Moving it
+requires **Update entry…** from the new location. **Remove entry…** leaves the
+AppImage, profile and theme history in place. Registration, update, removal and
+interrupted recovery are reviewed and conflict-checked; edited files are kept.
+
+Repeated launches activate the existing window for the same user, profile and
+graphical session. IPC accepts navigation only. An older running version is
+identified rather than silently replaced. Without a usable private runtime
+directory, launches run independently and theme transaction locking still
+protects writes. X11/Wayland focus is controlled by the window manager or
+compositor; activation may request attention rather than focus. Offscreen tests
+do not establish compositor or global-shortcut compatibility.
+
+## Control center workflows
 
 - **Appearance:** choose an image as a color source, select dark/light and
   image-derived/default colors, and inspect the terminal sample and all sixteen ANSI
   colors. **Set as desktop wallpaper** is checked by default for a new profile;
   saved choices and an unchecked option are preserved when switching images.
   Choose **Image…** for one file or **Folder…** for a sorted, scrollable list of
-  PNG, JPEG, WebP, BMP and TIFF images directly inside a directory (no recursion).
+  PNG, JPEG, WebP, BMP and TIFF images from the selected library.
   The list stays open while selecting images and previewing colors, with small,
   asynchronously decoded thumbnails beside each filename. Folder selection only
   lists files; choose a row to preview its palette. Tab focuses the list, arrows
@@ -95,8 +173,10 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
 
 Ctrl+Enter opens review. **Check desktop** and Ctrl+R rescan inventory while
 keeping pending palette and application choices.
-Buttons are disabled during serialized background work. Closing waits until the
-current operation finishes. No application is signalled or restarted; use the
+Write/review controls are disabled during serialized exclusive work. Palette
+preview and discovery run independently so browsing remains responsive. Closing
+discards read-only results; an exclusive operation must finish safely first.
+No application is signalled or restarted; use the
 application's own reload action or reopen it after applying. Native settings and
 applications that watch files may update immediately.
 

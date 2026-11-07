@@ -49,6 +49,12 @@ plans, application, export, undo and recovery.
 There is no HTTP server, configuration CLI or MCP implementation.
 The source launcher and AppImage packaging keep the engine local.
 
+Daily use has a compact view in the same window, with keyboard search/random,
+responsive preview and direct reviewed undo. Last applied state and a browsing
+candidate remain distinct. Optional application-menu registration is a separate,
+explicitly reviewed and reversible operation; it does not connect integrations,
+assign shortcuts, enable autostart or install another application copy.
+
 The GUI over the engine exposes existing color
 sources, unresolved issues, explicit color replacement and symlink handling,
 exact file changes, approval, disconnection and recovery. No user needs a terminal
@@ -70,7 +76,7 @@ session reload is included. Probing never changes the wallpaper.
 
 ## Next outcomes
 
-The proposed [everyday workflow delivery plan](WORKFLOW.md) prioritizes fast
+The [everyday workflow delivery record and plan](WORKFLOW.md) prioritizes fast
 daily access, responsive browsing and review, clear applied/draft/runtime states,
 and deliberate activation. It separates repeated theme changes from initial
 composition while retaining the safety requirements above.

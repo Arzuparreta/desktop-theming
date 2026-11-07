@@ -134,7 +134,8 @@ def history(paths):
             item = json.loads(path.read_text())
             items.append({"id": item["id"], "created": item["created"],
                           "status": item["status"], "components": item["components"],
-                          "files": len(item["changes"])})
+                          "files": len(item["changes"]), "theme": item.get("theme"),
+                          "previous_theme": item.get("previous_theme")})
         except (ValueError, KeyError, OSError) as exc:
             raise ValueError(f"Unreadable history journal: {path}. Preserve it for recovery.") from exc
     return sorted(items, key=lambda value: value["created"], reverse=True)
@@ -233,6 +234,14 @@ def restore_wallpaper(paths, action):
             break
 
 
+def theme_summary(profile, effective=None):
+    if not isinstance(profile, dict):
+        return None
+    return {"wallpaper": profile.get("wallpaper", ""), "mode": profile.get("mode", "adaptive"),
+            "polarity": profile.get("polarity", "dark"),
+            "effective": effective or ("safe" if not profile.get("wallpaper") or profile.get("mode") == "safe" else "unknown")}
+
+
 def apply(paths, plan):
     with locked(paths):
         pending = [item for item in history(paths) if item["status"] in
@@ -254,6 +263,12 @@ def apply(paths, plan):
         journal = {"id": ident, "created": datetime.now(timezone.utc).isoformat(),
                    "status": "prepared", "components": plan["profile"]["components"],
                    "changes": plan["changes"], "wallpaper_action": action, "settings_actions": settings}
+        journal["theme"] = theme_summary(plan["profile"], plan.get("palette", {}).get("effective"))
+        prior = snapshot(paths.profile)
+        try:
+            journal["previous_theme"] = theme_summary(json.loads(text_of(prior))) if prior["kind"] != "missing" else None
+        except (ValueError, UnicodeError):
+            journal["previous_theme"] = None
         journal_path = paths.history / f"{ident}.json"
         write_journal(journal_path, journal)
         written, attempted_settings = [], []

@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -42,7 +43,9 @@ class GuiTests(unittest.TestCase):
         self.env = patch.dict(os.environ, {"HOME": str(self.root),
                               "XDG_CONFIG_HOME": str(self.paths.config),
                               "XDG_STATE_HOME": str(self.paths.state),
-                              "XDG_CACHE_HOME": str(self.root / "cache")})
+                              "XDG_CACHE_HOME": str(self.root / "cache"),
+                              "XDG_DATA_HOME": str(self.root / "data"),
+                              "XDG_RUNTIME_DIR": str(self.root / "runtime")})
         self.env.start()
         self.addCleanup(self.env.stop)
         self.which = patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/usr/bin/" + c)
@@ -80,7 +83,7 @@ class GuiTests(unittest.TestCase):
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
                 self.app.processEvents()
-                if other.state["loaded"] and not other.state["busy"] and not other.timer.isActive():
+                if other.state["loaded"] and other.idle:
                     break
                 time.sleep(0.01)
             self.assertEqual(other.state["profile"]["wallpaper"], str(image))
@@ -88,8 +91,7 @@ class GuiTests(unittest.TestCase):
             self.assertFalse(self.paths.profile.exists())
             self.assertFalse(self.paths.state.exists())
         finally:
-            other.timer.stop()
-            other.pool.waitForDone()
+            other.shutdown()
 
     def test_navigation_rejects_symlink(self):
         from desktop_theming import navigation
@@ -114,26 +116,24 @@ class GuiTests(unittest.TestCase):
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
                 self.app.processEvents()
-                if other.state["loaded"] and not other.state["busy"] and not other.timer.isActive():
+                if other.state["loaded"] and other.idle:
                     break
                 time.sleep(0.01)
             self.assertEqual(other.state["profile"]["wallpaper"], "")
             self.assertEqual(other.imageFolder["path"], "")
             self.assertFalse(other.state["error"])
         finally:
-            other.timer.stop()
-            other.pool.waitForDone()
+            other.shutdown()
 
     def dispose(self):
-        self.controller.timer.stop()
-        self.controller.pool.waitForDone()
+        self.controller.shutdown()
         self.window.close()
         delete(self.engine)
         self.app.processEvents()
 
     def settle(self):
         deadline = time.monotonic() + 10
-        while self.controller.state["busy"] or self.controller.timer.isActive():
+        while not self.controller.idle:
             self.app.processEvents()
             QTest.qWait(10)
             if time.monotonic() > deadline:
@@ -202,6 +202,284 @@ class GuiTests(unittest.TestCase):
         self.window.setHeight(600)
         self.app.processEvents()
         self.assertEqual(self.messages, [])
+
+    def test_daily_latest_image_wins_while_palette_is_running(self):
+        from PIL import Image
+
+        from desktop_theming import theme
+
+        folder = self.root / "rapid"
+        folder.mkdir()
+        paths = [folder / f"{i}.png" for i in range(3)]
+        for path in paths:
+            Image.new("RGB", (12, 12), "green").save(path)
+        started, release = threading.Event(), threading.Event()
+        value = dict(self.controller.state["palette"])
+        observed = []
+
+        def compute(profile, *, cached=False):
+            if profile["wallpaper"] == str(paths[0]):
+                started.set()
+                release.wait(5)
+            return dict(value, wallpaper=profile["wallpaper"])
+
+        self.controller.changed.connect(lambda: observed.append(self.controller.state["palette"].get("wallpaper")))
+        with patch.object(theme, "palette", side_effect=compute):
+            try:
+                self.controller.chooseWallpaper(paths[0].as_uri())
+                self.controller.timer.stop()
+                self.controller.preview()
+                self.assertTrue(started.wait(1))
+                self.assertFalse(self.controller.state["busy"])
+                self.controller.chooseWallpaper(paths[1].as_uri())
+                self.controller.chooseWallpaper(paths[2].as_uri())
+                self.controller.timer.stop()
+                self.controller.preview()
+            finally:
+                release.set()
+            self.settle()
+        self.assertEqual(self.controller.state["profile"]["wallpaper"], str(paths[2]))
+        self.assertEqual(self.controller.state["palette"]["wallpaper"], str(paths[2]))
+        self.assertNotIn(str(paths[0]), observed)
+        self.assertNotIn(str(paths[1]), observed)
+        self.assertFalse(self.paths.profile.exists())
+        self.assertFalse(self.paths.state.exists())
+
+    def test_daily_preview_and_draft_remain_usable_during_inventory(self):
+        from desktop_theming import service
+
+        started, release = threading.Event(), threading.Event()
+        overview = self.controller.state["overview"]
+
+        def discover(paths):
+            started.set()
+            release.wait(5)
+            return overview
+
+        with patch.object(service, "overview", side_effect=discover):
+            try:
+                self.controller.refresh()
+                self.assertTrue(started.wait(1))
+                self.controller.setOption("polarity", "light")
+                deadline = time.monotonic() + 2
+                while not self.controller.state["palette"] and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    QTest.qWait(10)
+                self.assertEqual(self.controller.state["palette"]["polarity"], "light")
+                self.assertTrue(self.controller.state["scanning"])
+                self.assertFalse(self.controller.state["busy"])
+            finally:
+                release.set()
+            self.settle()
+        self.assertEqual(self.controller.state["profile"]["polarity"], "light")
+        self.assertTrue(self.controller.state["pending"])
+        self.assertEqual(self.controller.state["applied"]["polarity"], "dark")
+        self.controller.discardDraft()
+        self.settle()
+        self.assertFalse(self.controller.state["pending"])
+
+    def test_daily_search_random_and_keyboard_review_do_not_apply_implicitly(self):
+        from PIL import Image
+
+        folder = self.root / "daily images"
+        folder.mkdir()
+        for name in ("Catana.PNG", "Beach.png"):
+            Image.new("RGB", (16, 16), "green").save(folder / name)
+        self.choose_folder(folder, 2)
+        self.window.setProperty("dailyMode", True)
+        self.app.processEvents()
+        self.control("dailySearch").setProperty("text", "cAT")
+        self.app.processEvents()
+        self.assertEqual(self.control("dailyImageList").property("count"), 1)
+        self.click("dailyRandom")
+        self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "Catana.PNG"))
+        self.assertFalse(self.paths.profile.exists())
+        self.assertFalse(self.paths.state.exists())
+        self.controller.setWallpaperEnabled(False)
+        self.settle()
+        QTest.keyClick(self.window, Qt.Key_Return, Qt.ControlModifier)
+        self.settle()
+        self.assertEqual(self.controller.state["review"]["kind"], "apply")
+        self.assertFalse(self.paths.profile.exists())
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        self.app.processEvents()
+        self.assertFalse(self.controller.state["review"])
+        self.assertFalse(self.paths.profile.exists())
+        self.assertEqual(self.messages, [])
+
+    def test_menu_registration_and_removal_are_reviewed_from_the_window(self):
+        from desktop_theming import launcher
+
+        image = self.root / "Apps/Desktop Theming %ñ.AppImage"
+        image.parent.mkdir()
+        image.write_bytes(b"\x7fELF\x02\x01\x01\x00AI\x02" + b"\0" * 32)
+        image.chmod(0o755)
+        current = {"path": str(image), "kind": "appimage", "problem": ""}
+        with patch.object(launcher, "current_executable", return_value=current), patch.object(launcher, "ephemeral_roots", return_value=[]):
+            self.controller.refreshLauncher()
+            self.assertTrue(self.controller.state["launcher"]["available"])
+            self.controller.reviewLauncher(False)
+            self.settle()
+            self.assertEqual(self.controller.state["review"]["kind"], "launcher")
+            self.assertFalse((self.root / "data").exists())
+            self.assertFalse(self.paths.profile.exists())
+            self.click("approveChanges")
+            self.assertFalse(self.controller.state["error"])
+            self.assertTrue(self.controller.state["launcher"]["registered"])
+            entry = Path(self.controller.state["launcher"]["launcher"])
+            self.assertTrue(entry.exists())
+            self.assertFalse(self.paths.profile.exists())
+            self.controller.reviewLauncher(True)
+            self.settle()
+            self.assertTrue(entry.exists())
+            self.click("approveChanges")
+            self.assertFalse(entry.exists())
+            self.assertFalse(self.controller.state["launcher"]["registered"])
+            self.assertFalse(self.paths.profile.exists())
+        self.assertEqual(self.messages, [])
+
+    def test_inventory_started_before_apply_cannot_restore_old_applied_state(self):
+        from desktop_theming import service
+
+        real_overview = service.overview
+        old = self.controller.state["overview"]
+        started, release = threading.Event(), threading.Event()
+        calls = []
+
+        def discover(paths):
+            calls.append(1)
+            if len(calls) == 1:
+                started.set()
+                release.wait(8)
+                return old
+            return real_overview(paths)
+
+        def wait_operation():
+            deadline = time.monotonic() + 5
+            while self.controller.state["busy"] and time.monotonic() < deadline:
+                self.app.processEvents()
+                QTest.qWait(10)
+            self.assertFalse(self.controller.state["busy"])
+
+        with patch.object(service, "overview", side_effect=discover):
+            try:
+                self.controller.refresh()
+                self.assertTrue(started.wait(1))
+                self.controller.setOption("polarity", "light")
+                self.controller.review()
+                wait_operation()
+                self.assertEqual(self.controller.state["review"]["kind"], "apply")
+                self.controller.approve()
+                wait_operation()
+                self.assertEqual(self.controller.state["applied"]["polarity"], "light")
+            finally:
+                release.set()
+            self.settle()
+        self.assertEqual(self.controller.state["applied"]["polarity"], "light")
+        self.assertTrue(self.controller.state["hasApplied"])
+        self.assertFalse(self.controller.state["pending"])
+        self.assertEqual(self.messages, [])
+
+    def test_background_inventory_keeps_a_new_undo_review_open(self):
+        from desktop_theming import service
+
+        self.connect()
+        overview = self.controller.state["overview"]
+        started, release = threading.Event(), threading.Event()
+
+        def discover(paths):
+            started.set()
+            release.wait(5)
+            return overview
+
+        with patch.object(service, "overview", side_effect=discover):
+            try:
+                self.controller.refresh()
+                self.assertTrue(started.wait(1))
+                self.controller.undoLatest()
+                deadline = time.monotonic() + 3
+                while self.controller.state["busy"] and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    QTest.qWait(10)
+                self.assertEqual(self.controller.state["review"]["kind"], "undo")
+            finally:
+                release.set()
+            self.settle()
+        self.assertEqual(self.controller.state["review"]["kind"], "undo")
+        self.assertTrue(self.control("reviewDialog").property("visible"))
+        self.controller.cancelReview()
+
+    def test_deferred_inventory_preserves_a_failed_apply_error(self):
+        from desktop_theming import service
+
+        self.connect()
+        overview = self.controller.state["overview"]
+        started, release = threading.Event(), threading.Event()
+
+        def discover(paths):
+            started.set()
+            release.wait(20)
+            return overview
+
+        def finish_exclusive():
+            deadline = time.monotonic() + 10
+            while self.controller.state["busy"] and time.monotonic() < deadline:
+                self.app.processEvents()
+                QTest.qWait(10)
+            self.assertFalse(self.controller.state["busy"])
+
+        with patch.object(service, "overview", side_effect=discover), patch(
+                "desktop_theming.inventory.discover", return_value=overview):
+            try:
+                self.controller.refresh()
+                self.assertTrue(started.wait(1))
+                self.controller.setOption("polarity", "light")
+                self.controller.review()
+                finish_exclusive()
+                with patch.object(service, "apply_reviewed", side_effect=ValueError("The reviewed plan is stale; no files were changed")):
+                    self.controller.approve()
+                    finish_exclusive()
+                error, problem = self.controller.state["error"], dict(self.controller.state["problem"])
+                self.assertIn("stale", error)
+            finally:
+                release.set()
+            self.settle()
+        self.assertEqual(self.controller.state["error"], error)
+        self.assertEqual(self.controller.state["problem"], problem)
+
+    def test_cancelling_undo_review_resumes_an_interrupted_preview(self):
+        self.connect()
+        self.controller.setOption("polarity", "light")
+        self.controller.undoLatest()
+        self.settle()
+        self.assertEqual(self.controller.state["review"]["kind"], "undo")
+        self.assertFalse(self.controller.state["palette"])
+        self.controller.cancelReview()
+        self.settle()
+        self.assertEqual(self.controller.state["palette"]["polarity"], "light")
+
+    def test_switching_daily_view_keeps_the_users_window_size(self):
+        self.window.setWidth(1400)
+        self.window.setHeight(900)
+        for mode in (True, False):
+            self.window.setProperty("dailyMode", mode)
+            self.app.processEvents()
+            self.assertEqual((self.window.width(), self.window.height()), (1400, 900))
+
+    def test_review_shortcut_does_not_bypass_required_recovery(self):
+        self.connect()
+        ident = self.controller.state["overview"]["history"][0]["id"]
+        path = self.paths.history / f"{ident}.json"
+        journal = json.loads(path.read_text())
+        journal["status"] = "recovery-needed"
+        path.write_text(json.dumps(journal))
+        self.controller.refresh()
+        self.settle()
+        self.assertFalse(self.control("reviewChanges").property("enabled"))
+        QTest.keyClick(self.window, Qt.Key_Return, Qt.ControlModifier)
+        self.settle()
+        self.assertFalse(self.controller.state["review"])
+        self.assertFalse(self.controller.state["error"])
 
     def test_connect_review_apply_disconnect_and_undo_via_window(self):
         config = self.paths.config / "kitty/kitty.conf"
