@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (must match desktop_theming.__version__, e.g. 0.1.0)'
+        description: 'Release version (must match desktop_theming.__version__, e.g. 0.4.0)'
         required: true
         type: string
 
