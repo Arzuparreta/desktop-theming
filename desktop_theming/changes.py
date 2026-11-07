@@ -151,8 +151,18 @@ def check_changes(changes, expected, paths):
 
 
 def config_root(paths, path):
-    # The only managed file outside XDG_CONFIG_HOME is zsh's conventional rc.
-    return paths.home if path == paths.home / ".zshrc" else paths.config
+    # Only conventional application paths extend the original config boundary.
+    from . import applications
+
+    if path in (paths.home / ".zshrc", paths.home / ".tmux.conf"):
+        return paths.home
+    if path.is_relative_to(paths.config):
+        return paths.config
+    if path.is_relative_to(paths.data / "konsole"):
+        return paths.data
+    if path.is_relative_to(applications.t3_home(paths) / "userdata"):
+        return paths.home
+    return paths.config
 
 
 def check_restoration_target(path, state):

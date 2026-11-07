@@ -16,9 +16,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import changes, formats, merge
+from . import applications, changes, formats, merge, rofi, structured
 
 FILES = {
+    **dict.fromkeys(sorted(applications.COMPONENTS), ()),
     "alacritty": ("alacritty/alacritty.toml",),
     "foot": ("foot/foot.ini",),
     "i3": ("i3/config",), "sway": ("sway/config",),
@@ -36,6 +37,12 @@ FILES = {
     "zsh": (), "fish": ("fish/config.fish",),
 }
 CAPABILITIES = {
+    "konsole": "Palette in the existing default user profile and a generated Konsole color scheme. Keep fonts, commands and other profiles. Reopen the terminal.",
+    "gnome-terminal": "Native palette in the current default GNOME Terminal profile only. Keep fonts, commands and other profiles. Preferences may take effect immediately.",
+    "vscode": "VS Code user interface and integrated terminal color customizations in Code/User/settings.json. Keep syntax themes, extensions and other settings. Workspace/profile overrides may take precedence.",
+    "btop": "Generated btop theme and color_theme selection only. Keep layout, meters and process preferences. Reopen btop or select the theme in its menu.",
+    "tmux": "Status, pane, message and selection styles through a generated source-file. Keep bindings, plugins and status text. Use tmux's own source-file action yourself; existing local options may override global defaults.",
+    "t3code": "T3 Code native seeded JSON theme and environment defaultTheme generation only. Keep providers, projects, agents and client preferences. Connected clients may follow the environment theme immediately. Mobile keeps its own appearance.",
     "kitty": "Terminal palette and UI colors. Reopen or reload the terminal.",
     "ghostty": "Terminal palette and selection colors. Reopen or reload the terminal.",
     "alacritty": "Modern TOML terminal palette. Legacy YAML/imports need manual migration. Uses live_config_reload when enabled.",
@@ -49,7 +56,7 @@ CAPABILITIES = {
     "xfce": "Native light/dark GTK theme counterpart, when installed. Select GTK separately for palette colors. Requires an active Xfce settings service.",
     "polybar": "Existing bar colors and conventional [colors] variables. Keep modules, hardware and layout. Custom module literals stay as configured. Reload the bar yourself.",
     "waybar": "Bar, tooltip and common module state colors. Keep layout, modules and existing CSS. Custom higher-specificity rules can override these defaults. Reload the bar yourself.",
-    "rofi": "Default palette and selection states using Rasi. Keep launcher configuration. Imported themes need manual resolution. Takes effect on next launch.",
+    "rofi": "Rasi palette, widget and normal/active/urgent selection colors over the existing theme. Keep options, layout, @theme and @import files. Imported files are read-only review dependencies. Takes effect on next launch.",
     "wofi": "GTK CSS palette and selected/hover states. Keep launcher configuration. Custom higher-specificity rules may override defaults. Takes effect on next launch.",
     "dunst": "Default and urgency colors. Keep notification behavior and application-specific rules. Reload Dunst yourself.",
     "mako": "Default notification colors. Keep behavior and filter-specific overrides. Run its reload action yourself.",
@@ -66,6 +73,8 @@ INI_FILES = {"foot": {"root": True}, "mako": {"root": True}, "dunst": {}, "plasm
 
 
 def targets(paths, component):
+    if component in applications.COMPONENTS:
+        return applications.targets(paths, component)
     if component == "zsh":
         directory = os.environ.get("ZDOTDIR", "")
         if directory and Path(directory) not in (paths.home, paths.config / "zsh"):
@@ -95,6 +104,14 @@ def merger(paths, path):
             continue
         if path not in files:
             continue
+        if component in applications.GENERATED and path == files[applications.GENERATED[component]]:
+            return None
+        if component == "vscode" or component == "t3code" and path == files[0]:
+            return structured.merge
+        if component == "konsole":
+            return functools.partial(merge.ini, same=formats.qsettings_same)
+        if component == "btop":
+            return functools.partial(merge.ini, root=True)
         if component == "qt" and path == files[2]:
             return None  # Our generated palette; any edit there is to managed colors.
         if component in INI_FILES:
@@ -159,6 +176,8 @@ def colors(value):
 
 def render(component, value):
     """Standalone native syntax. Rendering never reads a user's config or writes."""
+    if component in applications.COMPONENTS:
+        return applications.render(component, value, colors(value))
     c = colors(value)
     bg, fg, accent = c["bg"], c["fg"], c["accent"]
     if component == "alacritty":
@@ -232,11 +251,7 @@ def render(component, value):
                        f"{{ background-color: {accent}; }}\n#entry:selected #text, #entry:hover #text "
                        f"{{ color: {bg}; }}\n")
     if component == "rofi":
-        return (f"/* Generated by desktop-theming */\n* {{ background: {bg}; foreground: {fg}; "
-                f"selected: {accent}; background-color: @background; text-color: @foreground; }}\n"
-                "element { background-color: @background; text-color: @foreground; }\n"
-                "element selected { background-color: @selected; text-color: @background; }\n"
-                "element-text, element-icon { background-color: inherit; text-color: inherit; }\n")
+        return rofi.render(c)
     if component == "dunst":
         return formats.ini("", {"global": {"background": bg, "foreground": fg,
                             "frame_color": accent, "separator_color": accent},
@@ -319,6 +334,8 @@ def transform(paths, component, originals, value):
     text = texts[first]
     if component == "foot" and "_foot_modern" not in value:
         value = dict(value, _foot_modern="colors" not in formats.sections(text))
+    if component in applications.COMPONENTS:
+        return applications.transform(paths, component, texts, value, colors(value))
     rendered = render(component, value)
     if component == "alacritty":
         texts[first] = formats.alacritty(text, rendered)
@@ -357,7 +374,9 @@ def transform(paths, component, originals, value):
                 "custom_palette": "true", "color_scheme_path": formats.qsettings_string(scheme)}},
                 same=formats.qsettings_same)
         texts[scheme] = rendered
-    elif component in ("waybar", "wofi", "rofi", "gtk3", "gtk4"):
+    elif component == "rofi":
+        texts[first] = rofi.transform(paths, paths_list[0], text, colors(value))
+    elif component in ("waybar", "wofi", "gtk3", "gtk4"):
         texts[first] = formats.css(text, rendered)
     elif component == "swaybg":
         if re.search(r"(?m)^\s*include\s", text):
@@ -443,7 +462,7 @@ def inspect(paths, component):
             if record:
                 continue
             for line, text in enumerate(changes.text_of(state).splitlines(), 1):
-                if re.search(r"color|background|foreground|client\.|@theme|@import|zle_highlight|\bbg\b", text, re.I):
+                if re.search(r"color|background|foreground|client\.|@theme|@import|zle_highlight|\bbg\b|defaultTheme|source-file", text, re.I):
                     report["sources"].append(dict(path=name, line=line, directive="appearance",
                                                   value=text, kind="color"))
         report["has_existing_colors"] = bool(report["sources"])
@@ -451,6 +470,13 @@ def inspect(paths, component):
         sample = {"special": {"background": "#111111", "foreground": "#eeeeee", "cursor": "#eeeeee"},
                   "colors": {f"color{i}": "#99bbdd" for i in range(16)}, "wallpaper": "/tmp/preview.png"}
         transform(paths, component, originals if record else states, sample)
+        if component == "rofi":
+            original = changes.text_of((originals if record else states)[str(config_paths[0])])
+            dependency_report = rofi.inspect(paths, config_paths[0], original)
+            report["dependencies"] = dependency_report["dependencies"]
+            report["inputs"].extend(report["dependencies"])
+            report["sources"].extend(dependency_report["sources"])
+            report["has_existing_colors"] |= bool(dependency_report["sources"])
     except (OSError, ValueError, UnicodeError) as exc:
         report["issues"].append(str(exc))
     return report
@@ -461,6 +487,7 @@ def plan_all(paths, previous, profile, value, *, which=None):
     selected = set(profile["components"]) & set(FILES)
     old = set(previous["components"]) & set(FILES)
     records, originals, written, current, reports = {}, {}, {}, {}, {}
+    dependency_inputs = []
     for component in sorted(selected | old):
         record = load(paths, component)
         if component in old and not record:
@@ -497,12 +524,17 @@ def plan_all(paths, previous, profile, value, *, which=None):
     for component in sorted(selected):
         report = inspect(paths, component)
         reports[component] = report
+        dependency_inputs.extend(report.get("dependencies", []))
         if component == "foot" and "_foot_modern" in value:
             report["format"] = "dark/light sections (1.26+)" if value["_foot_modern"] else "legacy sections"
         if report["issues"]:
             raise ValueError("Cannot manage configuration: " + " ".join(report["issues"]))
         options = profile["resolutions"].get(component, {})
         if component not in records:
+            if component in applications.GENERATED:
+                generated = targets(paths, component)[applications.GENERATED[component]]
+                if current[str(generated)]["kind"] != "missing":
+                    raise ValueError(f"Unowned generated {component} theme exists; preserve or move it first.")
             if report["has_existing_colors"] and not options.get("replace_colors"):
                 raise ValueError(f"Existing color sources found for {component}; explicitly authorize color replacement.")
             if any(current[str(p)]["kind"] == "symlink" for p in targets(paths, component)) and options.get("symlink") != "detach":
@@ -510,21 +542,29 @@ def plan_all(paths, previous, profile, value, *, which=None):
             if component == "qt" and current[str(targets(paths, component)[2])]["kind"] != "missing":
                 raise ValueError("Unowned generated Qt theme exists; preserve or move it first.")
     combined = dict(originals)
+    rendered_after_rebase = set()
     for component in sorted(selected):
         subset = {str(p): combined[str(p)] for p in targets(paths, component)}
+        if component == "rofi":
+            # A later @theme can change both specificity and the import graph.
+            # Render from the already conflict-checked current user content.
+            subset = {name: kept.get(name, state) for name, state in subset.items()}
+            rendered_after_rebase.update(subset)
         rendered = transform(paths, component, subset, value)
         for name, text in rendered.items():
-            combined[name] = changes.text_snapshot(text, originals[name].get("mode", 0o600))
+            mode = current[name].get("mode", 0o600) if component == "rofi" else originals[name].get("mode", 0o600)
+            combined[name] = changes.text_snapshot(text, mode)
     # Apply the new palette to the files as they are now, so later edits and the
     # order chosen by the program or person who made them stay in place.
     # inspect() has already run each adapter's safety checks on that content.
     for name, base in written.items():
-        combined[name] = changes.carry(Path(name), base, current[name], combined[name], merger(paths, name))
+        if name not in rendered_after_rebase:
+            combined[name] = changes.carry(Path(name), base, current[name], combined[name], merger(paths, name))
     originals.update(kept)
     for component in sorted(selected & {"zsh", "fish"}):
         text = changes.text_of(combined[str(targets(paths, component)[0])])
         validate_shell(component, text, (which or shutil.which)(component))
-    proposed, inputs = [], []
+    proposed, inputs = [], dependency_inputs
     for name, state in combined.items():
         path = Path(name)
         if state["kind"] == "symlink":

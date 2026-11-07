@@ -90,6 +90,9 @@ choices, links, ownership, disconnection and conflicts. The GUI exposes these wo
 | Component | Discovery | Managed theme |
 |---|---|---|
 | kitty, Ghostty | Executables, processes, conventional configs and color sources | Palette, marked include, disconnect, undo |
+| Konsole, GNOME Terminal | Executables/processes, default-profile configuration | Default user profile palette; native GNOME Terminal settings with conflict-checked undo |
+| VS Code, T3 Code | Executables/processes and conventional user configuration | VS Code interface/terminal customizations; T3 native environment theme, keeping other settings |
+| btop, tmux | Executables/processes and conventional configs | Generated themes; preserve layout, bindings and status text; manual activation where needed |
 | Alacritty, foot | Executables, processes, conventional configs and appearance sources | TOML/INI palettes, disconnect and undo |
 | i3, Sway, Hyprland | Available/running components and session evidence | Window borders/title roles; manual session reload |
 | GNOME, Xfce | Available/running components and session evidence | Reviewed native mode/accent or installed theme counterpart; active session required |

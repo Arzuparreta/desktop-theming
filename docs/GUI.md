@@ -128,7 +128,10 @@ do not establish compositor or global-shortcut compatibility.
   Images honor orientation metadata and decode asynchronously within a bounded
   2560×1440 size, independently of window resizing. Missing/unreadable images
   show an explicit preview message.
-- **Components:** select **Use palette** beside a supported integration,
+- **Components:** running components and the active session appear first, then
+  applications available on PATH, then the remaining components. Category and
+  name provide stable ordering within each group; changing a selection keeps its
+  row in place. Select **Use palette** beside a supported integration,
   **Use appearance** for native GNOME/Xfce preferences, or **Use image** for Sway
   background configuration. Each row explains its exact scope and activation;
   see [the integration matrix](INTEGRATIONS.md). The application

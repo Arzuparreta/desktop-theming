@@ -62,7 +62,8 @@ command to finish those workflows. A future MCP interface and small fallback CLI
 for agents will use the same engine.
 
 Managed integrations cover the detected terminals, bars, launchers, notifications,
-shells, GTK/Qt files and native GNOME/Xfce preferences, each with its own scope.
+shells, GTK/Qt files, application themes (including VS Code and T3 Code) and
+native GNOME/Xfce/GNOME Terminal preferences, each with its own scope.
 Wallpaper changes use automatically selected, session-specific adapters with
 reviewed application and conflict-checked undo. Swaybg can instead configure the
 next manual Sway reload without replacing a running process. See INTEGRATIONS.md
