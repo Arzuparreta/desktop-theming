@@ -29,7 +29,7 @@ reopen it yourself.
 | Xfce | Existing GTK theme's installed light/dark counterpart through `/Net/ThemeName` | Active Xfce and already running `xfconfd` required. Missing counterparts block the change. Adwaita variants are built into GTK 3. No icon, font, panel or window-manager changes. Select GTK separately for palette CSS |
 | Polybar | Each existing bar's background/foreground and conventional `[colors]` variables | Needs an existing `[bar/name]`; no module/hardware configuration is invented. Custom module literals or differently named variables remain as configured. Reload yourself |
 | Waybar | Bar, tooltip, workspace active/hover/urgent and battery-critical defaults in `style.css` | Keep modules, layout and existing style rules. Higher-specificity application/user rules may override defaults. Reload yourself |
-| Rofi | Rasi defaults and selected element colors appended to `config.rasi` | Keep `configuration` preferences. Imported/reset themes require manual resolution/export. Next invocation |
+| Rofi | Color overrides over the existing Rasi theme, including normal/alternate/selected rows, active/urgent states and color-bearing child/media selectors | Keep `configuration` preferences, layout and literal `@theme`/`@import`/`?import` directives. Imported files are read-only review inputs. No Rofi process is invoked by discovery or application. Next invocation; command-line theme overrides may take precedence. See the scope below |
 | Wofi | Window, input, text and selected/hover entry colors in `style.css` | Keep launcher behavior/layout. Custom higher-specificity rules may override defaults. Next invocation |
 | Dunst | Global/default and low/normal/critical urgency colors | Keep fonts, timeouts and application-specific filter rules. Filters can intentionally override defaults. Reload yourself |
 | Mako | Root/default background, text, border and progress colors | Keep behavior and filter-specific overrides. Use its reload action yourself |
@@ -103,9 +103,10 @@ only the recorded before/after values. Native settings APIs do not provide atomi
 compare-and-set, so another settings writer can still race the final check.
 
 The INI editor preserves unrelated entries/comments and rejects duplicate keys or
-sections and unsupported syntax. Stylesheet adapters append palette defaults
-without deleting existing layout rules; imports, unbalanced braces and
-`!important` require manual resolution or export. Shell startup files remain
+sections and unsupported syntax. GTK/Wofi/Waybar stylesheet adapters append
+palette defaults without deleting existing layout rules; their imports,
+unbalanced braces and `!important` require manual resolution or export.
+Rofi has a separate Rasi adapter supporting the native theme/import structure. Shell startup files remain
 unevaluated scripts; custom control flow/plugins can override or prevent later
 assignments. These are conventional file adapters, not interpreters for arbitrary
 desktop configuration languages or custom launch flags.
@@ -127,11 +128,54 @@ schema and apply/undo real GSettings values using an isolated keyfile backend,
 with an unusable desktop bus address. QSettings verifies the Qt palette role
 lists and configuration paths, reads every value spelling we write and writes the
 same spelling for ASCII values. The existing GTK 3 CSS parser checks generated
-GTK/Wofi/Waybar stylesheet syntax without initializing a display. Rofi validation
-requires an already installed Rofi and private Xvfb; it is skipped if either is
-missing. These checks establish syntax/transaction behavior, not real-session
+GTK/Wofi/Waybar stylesheet syntax without initializing a display. Rofi's native
+headless theme/config dumps check the built-in default and every installed
+`/usr/share/rofi/themes/*.rasi` theme in both polarities, including preserved
+layout/preferences and resolved row/child colors. Those tests skip if Rofi is
+unavailable. The older standalone Rasi validator additionally needs private Xvfb. These checks establish syntax/transaction behavior, not real-session
 appearance in every application, compositor, toolkit or distribution. Whole-
 desktop accessibility is not established by the terminal palette checks.
+
+## Rofi scope
+
+Rofi documents loading a theme with `@theme` (reset), adding files with `@import`
+and appending overrides afterwards. The adapter retains those directives and
+all existing options/layout, and appends a marked color block. Literal named,
+relative, absolute and `~/` paths follow Rofi's `.rasi`/`.rasinc` search order:
+the including file, XDG config theme/config directories, XDG data theme directory,
+system XDG data directories and the conventional installation prefix. The native
+`"default"` resource and optional `?import` are supported. No legacy files or
+broken links are migrated automatically.
+
+Imports are read recursively with bounds and cycle checks. Each imported file,
+and missing candidates which could take precedence, becomes a review input.
+A changed import or search result invalidates approval. Sources are never
+rewritten; symlinked source themes may be read, while the root config still
+requires explicit leaf-link detachment before writing. Updates re-read the
+current, conflict-checked theme selection before generating overrides. Later
+unrelated options, imports and permissions are kept through update/disconnection.
+
+The overlay covers all nine combinations of normal/alternate/selected rows and
+normal/active/urgent states, plus the exact color-bearing selectors from the
+loaded themes, including child widgets and media conditions. This prevents a
+stock alternate-row background or child text color from defeating dark mode.
+Explicit highlight colors are updated while preserving their emphasis styles.
+Fonts, dimensions, spacing, children, images and gradients are retained. Rasi
+values/environment expressions are not executed by the reader. Missing imports,
+malformed structure, dynamic import paths and cycles block review with a reason.
+The obsolete `configuration.theme` setting must be expressed with Rofi's
+recommended `@theme` directive; custom launch flags such as `-theme`/`-theme-str`
+remain outside file management.
+
+Validation on Rofi 2.0.0 exercised the built-in default and all **32 installed
+stock themes**, both dark and light, through Rofi's own headless dumps in private
+HOME/XDG. Native resolved colors are checked for every row state and direct
+child override, and layout/preferences are compared before/after. Contrast tests
+exercise all nine row states across five wallpaper-derived palettes in both
+polarities. These are parser/resolved-color checks, not physical-session visual
+acceptance or a guarantee of accessibility for every custom Rasi expression.
+The bundled smoke test also applies, updates and undoes a named imported theme
+with an initially white alternate row, preserving its source file.
 
 ## T3 Code scope
 

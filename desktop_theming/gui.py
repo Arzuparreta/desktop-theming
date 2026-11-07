@@ -90,6 +90,9 @@ class Controller(QObject):
         return QUrl.fromLocalFile(folder).toString() if folder and Path(folder).is_dir() else ""
 
     def publish(self, **values):
+        if "overview" in values:
+            overview = values["overview"]
+            values["overview"] = dict(overview, components=presentation.order_components(overview["components"]))
         if "profile" in values:
             image = values["profile"]["wallpaper"]
             values["wallpaperUrl"] = QUrl.fromLocalFile(image).toString() if image else ""
