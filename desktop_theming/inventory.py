@@ -1,6 +1,7 @@
 """Read-only discovery. Processes are evidence of running, not ownership."""
 
 import configparser
+import contextlib
 import os
 import shutil
 from pathlib import Path
@@ -9,6 +10,12 @@ from . import changes, configuration, integrations, ownership
 
 # id, name, category, executables, process names, config paths
 COMPONENTS = (
+    ("konsole", "Konsole", "Terminal", ("konsole",), ("konsole",), ("konsolerc",)),
+    ("gnome-terminal", "GNOME Terminal", "Terminal", ("gnome-terminal",), ("gnome-terminal-", "gnome-terminal", "gnome-terminal-server"), ()),
+    ("vscode", "VS Code", "Applications", ("code",), ("code",), ("Code/User/settings.json",)),
+    ("btop", "btop", "Terminal tools", ("btop",), ("btop",), ("btop/btop.conf",)),
+    ("tmux", "tmux", "Terminal tools", ("tmux",), ("tmux: server", "tmux: client", "tmux"), ("tmux/tmux.conf",)),
+    ("t3code", "T3 Code", "Applications", ("t3", "t3code"), ("t3code",), ()),
     ("kitty", "kitty", "Terminal", ("kitty",), ("kitty",), ("kitty/kitty.conf",)),
     ("ghostty", "Ghostty", "Terminal", ("ghostty",), ("ghostty",),
      ("ghostty/config", "ghostty/config.ghostty")),
@@ -43,7 +50,7 @@ COMPONENTS = (
     ("hyprpaper", "hyprpaper", "Wallpaper", ("hyprctl",), ("hyprpaper",), ()),
     ("swaybg", "swaybg", "Wallpaper", ("swaybg",), ("swaybg",), ()),
 )
-SUPPORTED = {"kitty", "ghostty", "gnome", "xfce"} | set(integrations.FILES)
+SUPPORTED = {"kitty", "ghostty", "gnome", "xfce", "gnome-terminal"} | set(integrations.FILES)
 START = "# BEGIN desktop-theming"
 END = "# END desktop-theming"
 
@@ -83,7 +90,7 @@ def session(environ=None):
 def config_target(paths, component):
     if component in integrations.FILES:
         return integrations.targets(paths, component)[0]
-    if component in ("gnome", "xfce"):
+    if component in ("gnome", "xfce", "gnome-terminal"):
         return paths.ownership(component)
     if component == "kitty":
         return paths.config / "kitty/kitty.conf"
@@ -146,9 +153,14 @@ def discover(paths, *, running=None, which=None, environ=None):
     result = []
     for ident, name, category, commands, process_names, configs in COMPONENTS:
         files = [paths.config / file for file in configs]
+        if ident in ("t3code", "tmux"):
+            with contextlib.suppress(ValueError):
+                files = integrations.targets(paths, ident)
         if ident == "zsh":
             files.append(paths.home / ".zshrc")
         binaries = [command for command in commands if which(command)]
+        if ident == "t3code" and not binaries and (paths.home / ".t3/bin/t3").is_file():
+            binaries = [str(paths.home / ".t3/bin/t3")]
         item = {"id": ident, "name": name, "category": category,
                 "installed": bool(binaries) if commands else None,
                 "executables": binaries,

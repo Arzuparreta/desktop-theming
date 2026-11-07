@@ -16,9 +16,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import changes, formats, merge
+from . import applications, changes, formats, merge, structured
 
 FILES = {
+    **dict.fromkeys(sorted(applications.COMPONENTS), ()),
     "alacritty": ("alacritty/alacritty.toml",),
     "foot": ("foot/foot.ini",),
     "i3": ("i3/config",), "sway": ("sway/config",),
@@ -36,6 +37,12 @@ FILES = {
     "zsh": (), "fish": ("fish/config.fish",),
 }
 CAPABILITIES = {
+    "konsole": "Palette in the existing default user profile and a generated Konsole color scheme. Keep fonts, commands and other profiles. Reopen the terminal.",
+    "gnome-terminal": "Native palette in the current default GNOME Terminal profile only. Keep fonts, commands and other profiles. Preferences may take effect immediately.",
+    "vscode": "VS Code user interface and integrated terminal color customizations in Code/User/settings.json. Keep syntax themes, extensions and other settings. Workspace/profile overrides may take precedence.",
+    "btop": "Generated btop theme and color_theme selection only. Keep layout, meters and process preferences. Reopen btop or select the theme in its menu.",
+    "tmux": "Status, pane, message and selection styles through a generated source-file. Keep bindings, plugins and status text. Use tmux's own source-file action yourself; existing local options may override global defaults.",
+    "t3code": "T3 Code native seeded JSON theme and environment defaultTheme generation only. Keep providers, projects, agents and client preferences. Connected clients may follow the environment theme immediately. Mobile keeps its own appearance.",
     "kitty": "Terminal palette and UI colors. Reopen or reload the terminal.",
     "ghostty": "Terminal palette and selection colors. Reopen or reload the terminal.",
     "alacritty": "Modern TOML terminal palette. Legacy YAML/imports need manual migration. Uses live_config_reload when enabled.",
@@ -66,6 +73,8 @@ INI_FILES = {"foot": {"root": True}, "mako": {"root": True}, "dunst": {}, "plasm
 
 
 def targets(paths, component):
+    if component in applications.COMPONENTS:
+        return applications.targets(paths, component)
     if component == "zsh":
         directory = os.environ.get("ZDOTDIR", "")
         if directory and Path(directory) not in (paths.home, paths.config / "zsh"):
@@ -95,6 +104,14 @@ def merger(paths, path):
             continue
         if path not in files:
             continue
+        if component in applications.GENERATED and path == files[applications.GENERATED[component]]:
+            return None
+        if component == "vscode" or component == "t3code" and path == files[0]:
+            return structured.merge
+        if component == "konsole":
+            return functools.partial(merge.ini, same=formats.qsettings_same)
+        if component == "btop":
+            return functools.partial(merge.ini, root=True)
         if component == "qt" and path == files[2]:
             return None  # Our generated palette; any edit there is to managed colors.
         if component in INI_FILES:
@@ -159,6 +176,8 @@ def colors(value):
 
 def render(component, value):
     """Standalone native syntax. Rendering never reads a user's config or writes."""
+    if component in applications.COMPONENTS:
+        return applications.render(component, value, colors(value))
     c = colors(value)
     bg, fg, accent = c["bg"], c["fg"], c["accent"]
     if component == "alacritty":
@@ -319,6 +338,8 @@ def transform(paths, component, originals, value):
     text = texts[first]
     if component == "foot" and "_foot_modern" not in value:
         value = dict(value, _foot_modern="colors" not in formats.sections(text))
+    if component in applications.COMPONENTS:
+        return applications.transform(paths, component, texts, value, colors(value))
     rendered = render(component, value)
     if component == "alacritty":
         texts[first] = formats.alacritty(text, rendered)
@@ -443,7 +464,7 @@ def inspect(paths, component):
             if record:
                 continue
             for line, text in enumerate(changes.text_of(state).splitlines(), 1):
-                if re.search(r"color|background|foreground|client\.|@theme|@import|zle_highlight|\bbg\b", text, re.I):
+                if re.search(r"color|background|foreground|client\.|@theme|@import|zle_highlight|\bbg\b|defaultTheme|source-file", text, re.I):
                     report["sources"].append(dict(path=name, line=line, directive="appearance",
                                                   value=text, kind="color"))
         report["has_existing_colors"] = bool(report["sources"])
@@ -503,6 +524,10 @@ def plan_all(paths, previous, profile, value, *, which=None):
             raise ValueError("Cannot manage configuration: " + " ".join(report["issues"]))
         options = profile["resolutions"].get(component, {})
         if component not in records:
+            if component in applications.GENERATED:
+                generated = targets(paths, component)[applications.GENERATED[component]]
+                if current[str(generated)]["kind"] != "missing":
+                    raise ValueError(f"Unowned generated {component} theme exists; preserve or move it first.")
             if report["has_existing_colors"] and not options.get("replace_colors"):
                 raise ValueError(f"Existing color sources found for {component}; explicitly authorize color replacement.")
             if any(current[str(p)]["kind"] == "symlink" for p in targets(paths, component)) and options.get("symlink") != "detach":
