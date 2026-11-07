@@ -22,14 +22,15 @@ are one historical example, not the architecture or a required desktop stack.
 
 ## Next complete workflows
 
-The [everyday workflow plan](docs/WORKFLOW.md) defines the next delivery sequence
-and acceptance gates. These are planned, not implemented:
+The [everyday workflow record and plan](docs/WORKFLOW.md) tracks delivery and
+remaining acceptance gates:
 
 - [ ] Measure launch, browsing, review and activation against explicit daily tasks.
-- [ ] Separate applied, draft and last-viewed state; keep the latest preview request.
-- [ ] Deliver keyboard-first daily browsing, search/random, concise exact review and direct reviewed undo.
-- [ ] Add reviewed application-menu registration, repair/removal and single-instance activation.
-- [ ] Report per-integration activation state and validate any explicit reload capability separately.
+- [x] Separate applied, draft and last-viewed state; keep the latest preview request.
+- [x] Deliver keyboard-first daily browsing, search/random, concise exact review and direct reviewed undo.
+- [x] Add reviewed application-menu registration, repair/removal and single-instance activation.
+- [x] Explain per-integration activation steps without claiming observed runtime appearance.
+- [ ] Validate targeted explicit live activation separately in disposable real application sessions.
 
 - [x] Build the GUI: inventory, color-source inspection, explicit replacement/link choices,
       previews, exact review, approval, standalone export, undo and recovery.
@@ -63,7 +64,7 @@ and acceptance gates. These are planned, not implemented:
 - [ ] Optional prompt segments using the common palette.
 - [ ] Per-component overrides, icon/cursor selection and contrast explanations.
 - [ ] Optional time-of-day or sensor-based appearance switching with explicit enrollment.
-- [ ] Wallpaper thumbnails and library browsing.
+- [x] Wallpaper thumbnails, search/random and bounded optional recursive library browsing.
 
 Each adapter must declare discovery/configuration/reload capabilities and its
 actual validation evidence. Previewing and inspection must remain read-only.

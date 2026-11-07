@@ -5,11 +5,11 @@ from pathlib import Path
 from . import appearance, changes, integrations, inventory
 
 
-def connection(paths, component):
+def connection(paths, component, *, discovered=None):
     """Explain decisions before selecting an integration. Never grants permission."""
     if component not in inventory.SUPPORTED:
         raise ValueError("This application does not support theme changes yet.")
-    found = inventory.discover(paths)
+    found = discovered if discovered is not None else inventory.discover(paths)
     item = next(c for c in found["components"] if c["id"] == component)
     report = item.get("configuration", {})
     issues = list(report.get("issues", []))
@@ -57,11 +57,68 @@ def needs_decision(info, profile):
             or info["existingColors"] and not options.get("replace_colors"))
 
 
+def review_level(paths, plan, previous):
+    """Only established, unchanged management scope gets a compact presentation."""
+    profile = plan["profile"]
+    if not paths.profile.is_file() or any(profile[key] != previous[key]
+            for key in ("components", "resolutions", "set_wallpaper")):
+        return "attention"
+    for component in profile["components"]:
+        record = paths.ownership(component)
+        if not record.is_file() or record.is_symlink():
+            return "attention"
+        report = plan.get("configuration", {}).get(component, {})
+        if report.get("issues") or report.get("linked_paths"):
+            return "attention"
+    if any(item.get("detach_symlink") or item["before"]["kind"] == "symlink"
+           for item in plan["changes"]):
+        return "attention"
+    known = set(integrations.CAPABILITIES.values()) | {plan["palette"].get("reason", "")}
+    if any(note not in known and not note.startswith("No application is signalled,")
+           for note in plan["warnings"]):
+        return "attention"
+    return "routine"
+
+
+def activation_guidance(profile):
+    """Configured state is known; runtime appearance is never inferred from a file."""
+    instructions = {
+        "rofi": "Open Rofi again to read its saved colors.",
+        "wofi": "Open Wofi again to read its saved colors.",
+        "alacritty": "Live update depends on live_config_reload; otherwise reopen Alacritty.",
+        "mako": "Use Mako's own reload action to read the saved colors.",
+        "dunst": "Use Dunst's own reload action to read the saved colors.",
+        "i3": "Use i3's reload action yourself. It can also activate unrelated pending i3 edits.",
+        "sway": "Use Sway's reload action yourself. It can also activate unrelated pending Sway edits.",
+        "swaybg": "The image is configured for your next manual Sway reload.",
+        "hyprland": "Use Hyprland's own reload action if it has not already noticed the saved colors.",
+        "gnome": "Native preferences were saved; applications may update immediately.",
+        "xfce": "Native preferences were saved; applications may update immediately.",
+        "zsh": "Open a new interactive zsh session to read its saved colors.",
+        "fish": "Open a new interactive fish session to read its saved colors.",
+    }
+    names = {item[0]: item[1] for item in inventory.COMPONENTS}
+    return [{"id": component, "name": names[component], "status": "configured",
+             "runtime": "unverified", "message": instructions.get(component,
+                "Reopen the application or use its own reload action to read the saved colors.")}
+            for component in profile["components"]]
+
+
 def review_summary(paths, plan, previous):
     selected = set(plan["profile"]["components"])
     old = set(previous["components"])
     palette = plan["palette"]
     source = "the default palette" if palette["effective"] == "safe" else "the selected image's palette"
+    if review_level(paths, plan, previous) == "routine":
+        names = {item[0]: item[1] for item in inventory.COMPONENTS}
+        result = [f"Apply {source} with a {palette['polarity']} background.",
+                  "Applications: " + (", ".join(names[c] for c in sorted(selected)) or "Palette profile only") + ". Keep the same management scope."]
+        if plan["profile"]["wallpaper"]:
+            result.append("Image: " + Path(plan["profile"]["wallpaper"]).name)
+        if plan.get("wallpaper_action"):
+            result.append("Change the desktop wallpaper; previous backgrounds are kept for undo.")
+        result.append("Exact changes are available below. Applications may need their own reload action.")
+        return result
     result = [f"Apply {source} with a {palette['polarity']} background."]
     for ident in sorted(selected | old):
         name = next(c[1] for c in inventory.COMPONENTS if c[0] == ident)

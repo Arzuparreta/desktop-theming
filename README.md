@@ -33,6 +33,17 @@ python3 -m venv .venv
 ```
 
 Opening the application and previewing colors do not change desktop settings.
+Returning users start in **Quick view**: search the remembered image library,
+preview a random image, switch modes and review changes using the keyboard.
+The full control center remains one click away. `--quick` / `--center` select
+either view, and a repeated launch activates the existing instance in the same
+graphical session where the compositor permits it.
+
+From the AppImage, **Access… → Add to menu…** offers reviewed, reversible
+application-menu registration at its current stable path. Copy the quick-view
+command there to choose a shortcut in your desktop settings. No key binding,
+autostart or background service is installed. [Daily workflow and shortcuts](docs/GUI.md#daily-use).
+
 **Set as desktop wallpaper** is checked by default for a new profile; uncheck
 it to use only the image’s palette. Your choice is kept when switching images.
 Choose **Folder…** to browse its images in a persistent list with small thumbnails.
@@ -108,6 +119,7 @@ Respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`, with these normal defaults:
 ~/.config/desktop-theming/themes/*.conf      generated terminal/Qt palettes
 ~/.config/desktop-theming/ownership/*.json   original configuration and owned integration
 ~/.local/state/desktop-theming/history/      undo/recovery journals
+~/.local/state/desktop-theming/launcher/     optional menu registration and recovery
 ```
 
 Preserve ownership records and history to retain restoration data. They contain

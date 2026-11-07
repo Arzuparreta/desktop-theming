@@ -88,7 +88,7 @@ def exercise(app, engine, controller):
             if state["ticks"] > 600:
                 raise ValueError("Diagnostic timed out")
             s = controller.state
-            if s["busy"] or controller.timer.isActive():
+            if not controller.idle:
                 return
             if s["error"]:
                 raise ValueError(s["error"])
@@ -148,13 +148,26 @@ def exercise(app, engine, controller):
                 if (controller.paths.home / "dotfiles/kitty.conf").read_text() != "font_size 16\nbackground #101010\n":
                     raise ValueError("The original linked file changed")
                 controller.renderExport("ghostty")
-            else:
+            elif step == 12:
                 if "palette = 0=" not in s["exportText"]:
                     raise ValueError("Standalone export failed")
+                engine.rootObjects()[0].setProperty("dailyMode", True)
+                controller.searchImages("b.JPG")
+                controller.chooseRandom()
+            elif step == 13:
+                if not s["profile"]["wallpaper"].endswith("b.JPG") or not s["palette"]:
+                    raise ValueError("Quick view search/random preview failed")
+                if controller.paths.profile.exists():
+                    raise ValueError("Daily browsing applied an unreviewed theme")
+                controller.searchImages("")
+                controller.setRecursive(True)
+            else:
+                if not controller.imageFolder["recursive"]:
+                    raise ValueError("Daily library recursion preference failed")
                 if not engine.rootObjects():
                     raise ValueError("QML window is missing")
                 exercise_integrations(controller.paths)
-                print("PASS: QML, image/folder dialogs, thumbnails, guided connection, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
+                print("PASS: QML, image/folder dialogs, thumbnails, guided connection, quick view, search/random, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
                 timer.stop()
                 app.exit(0)
                 return

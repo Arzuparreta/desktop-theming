@@ -5,12 +5,16 @@ Pillow, PySide6, Qt libraries/QML modules and platform plugins. It uses the host
 PATH and HOME/XDG directories without a broker or sandbox. Desktop discovery only reads configuration; desktop changes still require review
 and approval in the GUI. Choosing an image or folder saves only navigation state.
 Running an AppImage does not install packages, a second copy or a background
-service. Local and release AppImages use the same HOME/XDG profile and history.
+service. Optional **Access… → Add to menu…** registers a reviewed, reversible
+per-user application-menu entry. It starts the existing AppImage at its stable
+path and assigns no keyboard shortcut. [Daily access and repair](GUI.md#application-menu-and-shortcuts)
+describe the explicit workflow. Local and release AppImages use the same HOME/XDG profile and history.
 Replacing the executable does not require deleting that data.
 
 Qt QSettings remembers the last chosen image and image folder in
 `$XDG_CONFIG_HOME/desktop-theming/navigation.ini` (default:
-`~/.config/desktop-theming/navigation.ini`). Only these two paths are saved, with
+`~/.config/desktop-theming/navigation.ini`). These two paths and the chosen
+subfolder-browsing flag are saved, with
 no image copies or browsing history. Startup restores existing paths for browsing
 and preview only; it never applies desktop changes or restores approvals.
 Missing paths are ignored. Delete this file while the app is closed to forget
@@ -88,6 +92,24 @@ responsibilities. Keep Qt libraries dynamically linked and retain dependency
 license notices. See `packaging/THIRD_PARTY.md` for upstream licensing/source
 references. Revalidate the QML hook and bundled dialogs when changing Qt versions.
 
+### Everyday-workflow diagnostic
+
+`--measure-startup --quick` uses the same disposable HOME/XDG/PATH fixture as
+smoke testing and prints JSON milestones for QML creation, first rendered frame,
+first palette and usable controls. Timings start before Qt imports, after fixture
+creation. They exclude interpreter startup and AppImage mount/extraction, and
+do not establish p95 behavior or compositor focus on a real desktop.
+
+```sh
+APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --measure-startup --quick
+```
+
+Menu registration adds only `$XDG_DATA_HOME/applications/desktop-theming.desktop`,
+the SVG in `icons/hicolor/scalable/apps/`, and private registration/recovery data
+under `$XDG_STATE_HOME/desktop-theming/launcher/`. It keeps its journal separate
+from theme transactions so removal remains available after later theme changes.
+An interrupted menu change has its own reviewed recovery action in **Access…**.
+
 ### Release 0.1.0 startup failure on newer Mesa systems
 
 The original 0.1.0 release bundles Ubuntu 22.04's `libstdc++`. On newer systems
@@ -139,7 +161,7 @@ To cut a release:
 1. Update `desktop_theming.__version__` if necessary, run the required checks,
    and commit and push all completed changes to `main`.
 2. Fetch GitHub's current `main` and launch:
-   `gh workflow run appimage.yml --ref main -f version=0.2.1`
+   `gh workflow run appimage.yml --ref main -f version=0.3.0`
    (replace the version with the source version).
 3. Wait for the workflow to finish. Verify the public release tag resolves to
    the built source commit, download both assets, check the SHA-256 and run

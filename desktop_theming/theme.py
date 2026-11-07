@@ -1,24 +1,80 @@
 """Use the original color engine without importing or calling its apply hooks."""
 
+import copy
+import hashlib
 import importlib.machinery
 import importlib.util
+import threading
+from collections import OrderedDict
+from functools import lru_cache
 from pathlib import Path
+
+_LOCK = threading.RLock()
+_PREVIEWS = OrderedDict()
+MAX_PREVIEWS = 32
+
+
+@lru_cache(maxsize=1)
+def _load_engine(path, identity):
+    loader = importlib.machinery.SourceFileLoader("desktop_theming_palette", path)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
 
 
 def engine():
     try:
-        loader = importlib.machinery.SourceFileLoader(
-            "desktop_theming_palette", str(Path(__file__).resolve().parents[1] / "bin/walltheme"))
-        spec = importlib.util.spec_from_loader(loader.name, loader)
-        module = importlib.util.module_from_spec(spec)
-        loader.exec_module(module)
-        return module
+        # Keep the dependency check explicit, even after the pure module is cached.
+        import PIL  # noqa: F401
+
+        path = Path(__file__).resolve().parents[1] / "bin/walltheme"
+        info = path.stat()
+        with _LOCK:
+            return _load_engine(str(path), (info.st_mtime_ns, info.st_ctime_ns, info.st_size))
     except ImportError as exc:
         raise ValueError("Palette generation needs Python Pillow. Install it explicitly "
                          "using your distribution's package manager.") from exc
 
 
-def palette(profile):
+def image_identity(image):
+    if not image:
+        return ""
+    digest = hashlib.sha256()
+    with Path(image).open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def palette(profile, *, cached=False):
+    """Only previews opt into caching. Reviewed plans always recalculate."""
+    if not cached:
+        return _palette(profile)
+    module = engine()
+    try:
+        identity = image_identity(profile["wallpaper"])
+    except OSError as exc:
+        raise ValueError("Wallpaper is not a readable file.") from exc
+    key = (module, profile["wallpaper"], identity, profile["mode"], profile["polarity"])
+    with _LOCK:
+        if key in _PREVIEWS:
+            _PREVIEWS.move_to_end(key)
+            return copy.deepcopy(_PREVIEWS[key])
+    value = _palette(profile)
+    try:
+        unchanged = identity == image_identity(profile["wallpaper"])
+    except OSError:
+        unchanged = False
+    if unchanged:
+        with _LOCK:
+            _PREVIEWS[key] = copy.deepcopy(value)
+            while len(_PREVIEWS) > MAX_PREVIEWS:
+                _PREVIEWS.popitem(last=False)
+    return value
+
+
+def _palette(profile):
     module = engine()
     image = profile["wallpaper"]
     if image:
@@ -29,7 +85,7 @@ def palette(profile):
             analysis = module.Analysis(str(path))
         except Exception as exc:
             raise ValueError(f"Cannot read wallpaper: {exc}") from exc
-        scheme, reason = module.build(str(path), profile["mode"], profile["polarity"])
+        scheme, reason = module.build(str(path), profile["mode"], profile["polarity"], analysis=analysis)
     else:
         analysis = None
         scheme = module.build_safe(None, profile["polarity"])
