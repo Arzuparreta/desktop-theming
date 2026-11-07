@@ -105,7 +105,6 @@ ApplicationWindow {
     Shortcut { sequence: "Alt+D"; enabled: window.canNavigate; onActivated: controller.setOption("polarity", s.profile.polarity === "dark" ? "light" : "dark") }
     Shortcut { sequence: "Alt+M"; enabled: window.canNavigate; onActivated: controller.setOption("mode", s.profile.mode === "adaptive" ? "safe" : "adaptive") }
     Shortcut { sequence: "Ctrl+Z"; enabled: window.canNavigate && !(window.activeFocusItem instanceof TextInput) && !(window.activeFocusItem instanceof TextEdit); onActivated: controller.undoLatest() }
-    Shortcut { sequence: "Alt+Return"; enabled: reviewDialog.visible && !s.busy && (s.review.kind === "undo" || !!s.review.allowEmpty || (s.review.changes || []).length > 0); onActivated: controller.approve() }
     FileDialog {
         id: wallpaperPicker
         objectName: "wallpaperPicker"
@@ -609,6 +608,12 @@ ApplicationWindow {
     Dialog {
         id: reviewDialog
         objectName: "reviewDialog"
+        // Modal popups block window shortcuts outside their own content.
+        Shortcut {
+            sequences: ["Alt+Return", "Alt+Enter"]
+            enabled: reviewDialog.visible && approveChanges.enabled
+            onActivated: controller.approve()
+        }
         anchors.centerIn: parent
         readonly property bool routine: s.review.level === "routine"
         property bool showChanges: false
@@ -658,7 +663,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Body { Layout.fillWidth: true; text: (s.review.changes || []).length + " changes · " + (s.review.kind === "undo" ? "Restoration is checked for conflicts" : "You can undo these changes from History"); font.pixelSize: 12 }
                 Command { id: cancelReviewButton; text: "Cancel"; enabled: !s.busy; onClicked: controller.cancelReview() }
-                Command { objectName: "approveChanges"; text: (s.review.kind === "undo" ? "Restore changes" : "Apply changes") + " · Alt+Enter"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || !!s.review.allowEmpty || (s.review.changes || []).length > 0); onClicked: controller.approve() }
+                Command { id: approveChanges; objectName: "approveChanges"; text: (s.review.kind === "undo" ? "Restore changes" : "Apply changes") + " · Alt+Enter"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || !!s.review.allowEmpty || (s.review.changes || []).length > 0); onClicked: controller.approve() }
             }
         }
     }
