@@ -17,7 +17,7 @@ From a source checkout, explicitly prepare a development environment:
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-gui.txt
-.venv/bin/python -m desktop_theming
+.venv/bin/python -m linux_theming
 ```
 
 Python 3.11+ is supported. The engine remains usable without Qt.
@@ -188,9 +188,9 @@ applications that watch files may update immediately.
 ```sh
 .venv/bin/python -m pip install ruff
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/ruff check desktop_theming tests
+.venv/bin/ruff check linux_theming tests
 bash -n install.sh scripts/build-appimage.sh
-.venv/bin/python -m desktop_theming --smoke-test
+.venv/bin/python -m linux_theming --smoke-test
 ```
 
 Qt tests run offscreen with software rendering and disposable HOME/XDG roots.

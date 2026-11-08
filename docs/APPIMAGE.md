@@ -12,8 +12,8 @@ describe the explicit workflow. Local and release AppImages use the same HOME/XD
 Replacing the executable does not require deleting that data.
 
 Qt QSettings remembers the last chosen image and image folder in
-`$XDG_CONFIG_HOME/desktop-theming/navigation.ini` (default:
-`~/.config/desktop-theming/navigation.ini`). These two paths and the chosen
+`$XDG_CONFIG_HOME/linux-theming/navigation.ini` (default:
+`~/.config/linux-theming/navigation.ini`). These two paths and the chosen
 subfolder-browsing flag are saved, with
 no image copies or browsing history. Startup restores existing paths for browsing
 and preview only; it never applies desktop changes or restores approvals.
@@ -104,9 +104,9 @@ do not establish p95 behavior or compositor focus on a real desktop.
 APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --measure-startup --quick
 ```
 
-Menu registration adds only `$XDG_DATA_HOME/applications/desktop-theming.desktop`,
+Menu registration adds only `$XDG_DATA_HOME/applications/linux-theming.desktop`,
 the SVG in `icons/hicolor/scalable/apps/`, and private registration/recovery data
-under `$XDG_STATE_HOME/desktop-theming/launcher/`. It keeps its journal separate
+under `$XDG_STATE_HOME/linux-theming/launcher/`. It keeps its journal separate
 from theme transactions so removal remains available after later theme changes.
 An interrupted menu change has its own reviewed recovery action in **Access…**.
 
@@ -158,7 +158,7 @@ builds or smoke tests prevent publication.
 
 To cut a release:
 
-1. Update `desktop_theming.__version__` if necessary, run the required checks,
+1. Update `linux_theming.__version__` if necessary, run the required checks,
    and commit and push all completed changes to `main`.
 2. Fetch GitHub's current `main` and launch:
    `gh workflow run appimage.yml --ref main -f version=0.4.0`

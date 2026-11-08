@@ -5,13 +5,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, inventory, service, theme
-from desktop_theming.paths import Paths
+from linux_theming import changes, inventory, service, theme
+from linux_theming.paths import Paths
 
 
 class PlatformTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-test-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="linux-theming-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.paths = Paths(self.root, self.root / "config", self.root / "state")
@@ -176,7 +176,7 @@ class PlatformTests(unittest.TestCase):
         edited = config.read_text().replace("include ", "include  ")
         config.write_text(edited)
         profile = self.paths.profile.read_bytes()
-        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
+        with self.assertRaisesRegex(ValueError, "changed outside linux-theming"):
             changes.undo(self.paths, result["id"])
         self.assertEqual(self.paths.profile.read_bytes(), profile)
         self.assertEqual(config.read_text(), edited)
@@ -285,7 +285,7 @@ class PlatformTests(unittest.TestCase):
                         {"components": ["kitty", "kitty"]}, {"polarity": "blue"}):
             with self.subTest(profile=profile), self.assertRaises(ValueError):
                 service.validate_profile(profile)
-        config = self.write("desktop-theming/profile.json", "invalid json")
+        config = self.write("linux-theming/profile.json", "invalid json")
         with self.assertRaisesRegex(ValueError, "Existing file preserved"):
             self.plan()
         self.assertEqual(config.read_text(), "invalid json")

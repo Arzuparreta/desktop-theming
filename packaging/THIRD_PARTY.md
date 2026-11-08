@@ -29,6 +29,6 @@ Original project: https://isc.tamu.edu/~lewing/linux/
 
 Permission to use and/or modify this image is granted provided you acknowledge
 Larry Ewing (lewing@isc.tamu.edu) and The GIMP if someone asks.
-The original image and this attribution are also embedded in `desktop_theming/ui/icon.svg`.
+The original image and this attribution are also embedded in `linux_theming/ui/icon.svg`.
 `assets/icon.png` is that icon rendered at 256×256. The AppImage uses it as its
 `.DirIcon`, and editors such as T3 Code use it as the repository icon.

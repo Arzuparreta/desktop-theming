@@ -5,7 +5,7 @@ from . import changes
 
 
 def settings(paths):
-    path = paths.config / "desktop-theming/navigation.ini"
+    path = paths.config / paths.app_id / "navigation.ini"
     changes.safe_parents(path, paths.config)
     if path.is_symlink():
         raise ValueError(f"Navigation settings is a symlink: {path}")
@@ -23,8 +23,11 @@ def load(paths):
 
 
 def save(paths, key, value):
+    from . import migration
+
+    migration.guard(paths)
     store = settings(paths)
-    directory = paths.config / "desktop-theming"
+    directory = paths.config / paths.app_id
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     store.setValue(key, value)
     store.sync()  # Qt uses atomic synchronization by default.

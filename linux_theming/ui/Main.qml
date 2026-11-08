@@ -153,6 +153,12 @@ ApplicationWindow {
             Body { visible: s.busy || s.previewing || s.scanning; text: s.busy ? s.activity : s.previewing ? "Building palette…" : "Checking desktop…"; color: "#cad8cb"; Accessible.role: Accessible.StaticText }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#34363d" }
+        RowLayout {
+            visible: !!s.migration.needed && !window.recoveryNeeded
+            Layout.fillWidth: true
+            Body { Layout.fillWidth: true; text: s.migration.summary || ""; color: "#e4c793" }
+            Command { objectName: "reviewDataMigration"; text: "Review migration…"; enabled: !s.busy; onClicked: controller.reviewMigration() }
+        }
         Rectangle {
             visible: !!s.error || !!s.notice
             Layout.fillWidth: true
@@ -520,6 +526,7 @@ ApplicationWindow {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     Body { text: new Date(modelData.created).toLocaleString(Qt.locale(), Locale.ShortFormat); color: "#e7e7eb" }
+                                    Body { visible: !!modelData.migration; text: "Data migration to Linux Theming"; color: "#e4c793" }
                                     Body { text: historyStatus(modelData.status) + " · " + modelData.files + " files · " + (modelData.components.join(", ") || "Palette profile"); font.pixelSize: 12 }
                                     Body { visible: !!modelData.theme; text: modelData.theme ? ((modelData.theme.wallpaper || "Default palette").split("/").pop() + " · " + modelData.theme.polarity + " · " + modelData.theme.effective) : ""; font.pixelSize: 12 }
                                     Body { visible: !pending && modelData.status === "applied" && modelData.id !== latestActive; text: "Undo the more recent changes first."; font.pixelSize: 12 }
@@ -713,6 +720,8 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             spacing: 16
             Body { Layout.fillWidth: true; text: "Add a reversible entry to your application menu. Choose your own shortcut in your desktop’s keyboard settings; no key binding is changed here." }
+            Body { visible: !!s.migration.needed; Layout.fillWidth: true; text: s.migration.summary || ""; color: "#e4c793" }
+            Command { objectName: "migrateIdentity"; visible: !!s.migration.needed; text: "Review data migration…"; enabled: !s.busy; onClicked: { accessDialog.close(); controller.reviewMigration() } }
             Body { visible: !!s.launcher.error; Layout.fillWidth: true; text: s.launcher.error || ""; color: "#e4c793" }
             Body { visible: !!s.launcher.repair_needed; Layout.fillWidth: true; text: "The registered executable or menu files need repair. Open this AppImage from its stable location and review Update entry."; color: "#e4c793" }
             Command { visible: !!s.launcher.interrupted; text: "Recover interrupted menu change…"; onClicked: { accessDialog.close(); controller.recoverLauncher() } }

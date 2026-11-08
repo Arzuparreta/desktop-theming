@@ -36,7 +36,7 @@ link config/zsh/theme.zsh       "$HOME/.config/walltheme/theme.zsh"
 # zsh: load the color styles after the plugins (end of .zshrc).
 zline='[[ -f ~/.config/walltheme/theme.zsh ]] && source ~/.config/walltheme/theme.zsh'
 if [ -f "$HOME/.zshrc" ] && ! grep -qF "$zline" "$HOME/.zshrc"; then
-  printf '\n# Terminal colors (desktop-theming repo)\n%s\n' "$zline" >>"$HOME/.zshrc"
+  printf '\n# Terminal colors (linux-theming repo)\n%s\n' "$zline" >>"$HOME/.zshrc"
   echo "edit    ~/.zshrc (sources theme.zsh)"
 fi
 

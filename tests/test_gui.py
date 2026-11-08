@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes
-from desktop_theming.paths import Paths
+from linux_theming import changes
+from linux_theming.paths import Paths
 
 HAS_QT = importlib.util.find_spec("PySide6") is not None
 if HAS_QT:
@@ -24,7 +24,7 @@ if HAS_QT:
     from PySide6.QtTest import QTest
     from shiboken6 import delete
 
-    from desktop_theming.gui import Controller
+    from linux_theming.gui import Controller
 
 
 
@@ -36,7 +36,7 @@ class GuiTests(unittest.TestCase):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
 
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="desktop-theming-qt-")
+        self.temp = tempfile.TemporaryDirectory(prefix="linux-theming-qt-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.paths = Paths(self.root, self.root / "config", self.root / "state")
@@ -48,16 +48,21 @@ class GuiTests(unittest.TestCase):
                               "XDG_RUNTIME_DIR": str(self.root / "runtime")})
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.which = patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/usr/bin/" + c)
+        self.which = patch("linux_theming.inventory.shutil.which", side_effect=lambda c: "/usr/bin/" + c)
         self.which.start()
         self.addCleanup(self.which.stop)
+        # GUI workflow tests use a synthetic inventory. Scanning the real /proc
+        # makes scheduling assertions depend on unrelated host processes.
+        self.processes = patch("linux_theming.inventory.processes", return_value=set())
+        self.processes.start()
+        self.addCleanup(self.processes.stop)
         self.messages = []
         self.old_handler = qInstallMessageHandler(lambda kind, context, text: self.messages.append(text))
         self.addCleanup(lambda: qInstallMessageHandler(self.old_handler))
         self.controller = Controller(self.paths)
         self.engine = QQmlApplicationEngine()
         self.engine.setInitialProperties({"controller": self.controller})
-        qml = Path(__file__).resolve().parents[1] / "desktop_theming/ui/Main.qml"
+        qml = Path(__file__).resolve().parents[1] / "linux_theming/ui/Main.qml"
         self.engine.load(QUrl.fromLocalFile(str(qml)))
         self.assertTrue(self.engine.rootObjects(), self.messages)
         self.window = self.engine.rootObjects()[0]
@@ -93,12 +98,47 @@ class GuiTests(unittest.TestCase):
         finally:
             other.shutdown()
 
+    def test_published_profile_migrates_only_after_gui_review_and_can_be_undone(self):
+        from tests.legacy_fixture import restore
+
+        self.operation_timeout = 45  # All 25 selected adapters, including their restoration records.
+        self.dispose()
+        restore(self.root)
+        self.controller = Controller(self.paths)
+        self.engine = QQmlApplicationEngine()
+        self.engine.setInitialProperties({"controller": self.controller})
+        self.engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parents[1] / "linux_theming/ui/Main.qml")))
+        self.window = self.engine.rootObjects()[0]
+        self.controller.startup()
+        self.settle()
+        self.assertTrue(self.controller.state["migration"]["needed"])
+        self.assertEqual(self.controller.state["applied"]["polarity"], "light")
+        old_profile = self.root / "config/desktop-theming/profile.json"
+        self.assertTrue(old_profile.exists())
+        self.click("reviewDataMigration")
+        self.assertEqual(self.controller.state["review"]["kind"], "migration")
+        self.controller.cancelReview()
+        self.settle()
+        self.assertTrue(old_profile.exists())
+        self.click("reviewDataMigration")
+        self.click("approveChanges")
+        self.assertFalse(self.controller.state["error"], self.controller.state["error"])
+        self.assertFalse(self.controller.state["migration"]["needed"])
+        self.assertTrue((self.root / "config/linux-theming/profile.json").exists())
+        self.controller.undoLatest()
+        self.settle()
+        self.click("approveChanges")
+        self.assertFalse(self.controller.state["error"], self.controller.state["error"])
+        self.assertTrue(self.controller.state["migration"]["needed"])
+        self.assertTrue(old_profile.exists())
+        self.assertEqual(self.messages, [])
+
     def test_navigation_rejects_symlink(self):
-        from desktop_theming import navigation
+        from linux_theming import navigation
 
         target = self.root / "untouched.ini"
         target.write_text("original")
-        directory = self.paths.config / "desktop-theming"
+        directory = self.paths.config / "linux-theming"
         directory.mkdir(parents=True)
         (directory / "navigation.ini").symlink_to(target)
         with self.assertRaises(ValueError):
@@ -106,7 +146,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(target.read_text(), "original")
 
     def test_missing_navigation_paths_are_ignored(self):
-        from desktop_theming import navigation
+        from linux_theming import navigation
 
         navigation.save(self.paths, "folder", str(self.root / "missing"))
         navigation.save(self.paths, "wallpaper", str(self.root / "missing.png"))
@@ -190,7 +230,7 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.paths.profile.exists())
 
     def test_component_rows_follow_activity_and_availability_after_every_publication(self):
-        from desktop_theming import presentation
+        from linux_theming import presentation
 
         components = self.controller.state["overview"]["components"]
         self.assertEqual(components, presentation.order_components(components))
@@ -232,7 +272,7 @@ class GuiTests(unittest.TestCase):
     def test_daily_latest_image_wins_while_palette_is_running(self):
         from PIL import Image
 
-        from desktop_theming import theme
+        from linux_theming import theme
 
         folder = self.root / "rapid"
         folder.mkdir()
@@ -272,7 +312,7 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.paths.state.exists())
 
     def test_daily_preview_and_draft_remain_usable_during_inventory(self):
-        from desktop_theming import service
+        from linux_theming import service
 
         started, release = threading.Event(), threading.Event()
         overview = self.controller.state["overview"]
@@ -334,9 +374,9 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.messages, [])
 
     def test_menu_registration_and_removal_are_reviewed_from_the_window(self):
-        from desktop_theming import launcher
+        from linux_theming import launcher
 
-        image = self.root / "Apps/Desktop Theming %ñ.AppImage"
+        image = self.root / "Apps/Linux Theming %ñ.AppImage"
         image.parent.mkdir()
         image.write_bytes(b"\x7fELF\x02\x01\x01\x00AI\x02" + b"\0" * 32)
         image.chmod(0o755)
@@ -372,7 +412,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.messages, [])
 
     def test_inventory_started_before_apply_cannot_restore_old_applied_state(self):
-        from desktop_theming import service
+        from linux_theming import service
 
         real_overview = service.overview
         old = self.controller.state["overview"]
@@ -414,7 +454,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.messages, [])
 
     def test_background_inventory_keeps_a_new_undo_review_open(self):
-        from desktop_theming import service
+        from linux_theming import service
 
         self.connect()
         overview = self.controller.state["overview"]
@@ -443,7 +483,7 @@ class GuiTests(unittest.TestCase):
         self.controller.cancelReview()
 
     def test_deferred_inventory_preserves_a_failed_apply_error(self):
-        from desktop_theming import service
+        from linux_theming import service
 
         self.connect()
         overview = self.controller.state["overview"]
@@ -462,7 +502,7 @@ class GuiTests(unittest.TestCase):
             self.assertFalse(self.controller.state["busy"])
 
         with patch.object(service, "overview", side_effect=discover), patch(
-                "desktop_theming.inventory.discover", return_value=overview):
+                "linux_theming.inventory.discover", return_value=overview):
             try:
                 self.controller.refresh()
                 self.assertTrue(started.wait(1))
@@ -520,7 +560,7 @@ class GuiTests(unittest.TestCase):
         config.write_text("font_size 16\n")
         self.connect()
         self.assertIn("font_size 16", config.read_text())
-        self.assertIn("BEGIN desktop-theming", config.read_text())
+        self.assertIn("BEGIN linux-theming", config.read_text())
         self.assertIn("Changes applied", self.controller.state["notice"])
         self.controller.selectComponent("kitty", False)
         self.settle()
@@ -531,7 +571,7 @@ class GuiTests(unittest.TestCase):
         self.controller.reviewUndo(ident, False)
         self.settle()
         self.click("approveChanges")
-        self.assertIn("BEGIN desktop-theming", config.read_text())
+        self.assertIn("BEGIN linux-theming", config.read_text())
         self.assertEqual(self.messages, [])
 
     def test_new_file_adapters_and_unknown_gtk_availability_work_from_the_window(self):
@@ -581,7 +621,7 @@ class GuiTests(unittest.TestCase):
             raise AssertionError(args)
 
         with patch.dict(os.environ, DBUS_SESSION_BUS_ADDRESS="unix:path=/private-gui-test-bus", T3CODE_HOME=""), patch(
-                "desktop_theming.appearance.command", side_effect=command):
+                "linux_theming.appearance.command", side_effect=command):
             self.controller.refresh()
             self.settle()
             self.window.setProperty("page", 1)
@@ -602,7 +642,7 @@ class GuiTests(unittest.TestCase):
             self.assertFalse(self.controller.state["error"])
             self.assertFalse(values["use-theme-colors"])
             self.assertEqual(json.loads((self.paths.home / ".t3/userdata/settings.json").read_text())["defaultTheme"],
-                             "desktop-theming")
+                             "linux-theming")
             self.assertIn("Font=monospace,13", profile_file.read_text())
             self.controller.reviewUndo(self.controller.state["overview"]["history"][0]["id"], False)
             self.settle()
@@ -630,7 +670,7 @@ class GuiTests(unittest.TestCase):
             raise AssertionError(args)
 
         with patch.dict(os.environ, XDG_CURRENT_DESKTOP="GNOME"), patch(
-                "desktop_theming.appearance.command", side_effect=command):
+                "linux_theming.appearance.command", side_effect=command):
             self.controller.refresh()
             self.settle()
             self.window.setProperty("page", 1)
@@ -662,18 +702,18 @@ class GuiTests(unittest.TestCase):
         rendered = QImage(256, 256, QImage.Format_ARGB32)
         rendered.fill(Qt.transparent)
         painter = QPainter(rendered)
-        QSvgRenderer(str(repo / "desktop_theming/ui/icon.svg")).render(painter)
+        QSvgRenderer(str(repo / "linux_theming/ui/icon.svg")).render(painter)
         painter.end()
         samples = [abs(a - b) for y in range(0, 256, 4) for x in range(0, 256, 4)
                    for a, b in zip(png.pixelColor(x, y).getRgb(), rendered.pixelColor(x, y).getRgb(), strict=True)]
         self.assertLess(sum(samples) / len(samples), 2, "Re-render assets/icon.png from ui/icon.svg")
 
     def test_qt_native_palette_and_path_parse_with_qsettings(self):
-        from desktop_theming import integrations, service
+        from linux_theming import integrations, service
 
         paths = Paths(self.root, self.root / 'config #1 "quoted"', self.root / "state")
         profile = dict(service.DEFAULT_PROFILE, components=["qt"])
-        with patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
+        with patch("linux_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
             service.apply_reviewed(paths, service.make_plan(paths, profile))
         configs = integrations.targets(paths, "qt")
         for config in configs[:2]:
@@ -689,11 +729,11 @@ class GuiTests(unittest.TestCase):
     def test_qt_settings_saves_keep_themes_updatable_and_undoable(self):
         from PySide6.QtCore import QByteArray
 
-        from desktop_theming import integrations, inventory, service
+        from linux_theming import integrations, inventory, service
 
         paths = Paths(self.root, self.root / 'config #1 "quoted"', self.root / "state")
         profile = dict(service.DEFAULT_PROFILE, components=["qt"])
-        with patch("desktop_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
+        with patch("linux_theming.inventory.shutil.which", side_effect=lambda c: "/native/" + c):
             connected = service.apply_reviewed(paths, service.make_plan(paths, profile))
             configs = integrations.targets(paths, "qt")
             for config in configs[:2]:  # What qt5ct/qt6ct do when their window closes.
@@ -1098,7 +1138,7 @@ class GuiTests(unittest.TestCase):
     def test_wallpaper_selection_review_apply_and_undo_use_the_same_flow(self):
         from PIL import Image
 
-        from desktop_theming import wallpaper
+        from linux_theming import wallpaper
 
         image = self.root / "chosen.png"
         Image.new("RGB", (8, 8), "#224466").save(image)

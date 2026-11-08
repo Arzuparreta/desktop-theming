@@ -7,21 +7,21 @@ MCP and a small fallback CLI for agents are future adapters.
 
 ## Layout
 
-- `desktop_theming/presentation.py`: read-only explanations, connection preflight and review summaries.
-- `desktop_theming/gui.py`, `__main__.py`, `ui/`: asynchronous Qt adapter, launcher and QML.
-- `desktop_theming/smoke.py`: bundled diagnostic using a temporary HOME/XDG/PATH.
+- `linux_theming/presentation.py`: read-only explanations, connection preflight and review summaries.
+- `linux_theming/gui.py`, `__main__.py`, `ui/`: asynchronous Qt adapter, launcher and QML.
+- `linux_theming/smoke.py`: bundled diagnostic using a temporary HOME/XDG/PATH.
 - `packaging/`, `scripts/build-appimage.sh`: relocatable payload and AppImage build.
-- `desktop_theming/inventory.py`: read-only component and session discovery.
-- `desktop_theming/configuration.py`: conservative color/include inspection without evaluation.
-- `desktop_theming/ownership.py`: persistent ownership checks and disconnection restoration.
-- `desktop_theming/integrations.py`, `formats.py`: native file adapters, conservative editors and shared-file composition.
-- `desktop_theming/appearance.py`: read-only native appearance probes and reviewed GNOME/Xfce preferences.
-- `desktop_theming/wallpaper.py`: read-only session probes, explicit setters and restoration checks.
-- `desktop_theming/theme.py`: palette engine access and terminal renderers.
-- `desktop_theming/service.py`: profile validation and reviewed plan generation/application.
-- `desktop_theming/changes.py`: conflict checks, file replacement and undo journals.
-- `desktop_theming/merge.py`: three-way line and INI key merges that keep later outside edits.
-- `desktop_theming/paths.py`: HOME/XDG data locations.
+- `linux_theming/inventory.py`: read-only component and session discovery.
+- `linux_theming/configuration.py`: conservative color/include inspection without evaluation.
+- `linux_theming/ownership.py`: persistent ownership checks and disconnection restoration.
+- `linux_theming/integrations.py`, `formats.py`: native file adapters, conservative editors and shared-file composition.
+- `linux_theming/appearance.py`: read-only native appearance probes and reviewed GNOME/Xfce preferences.
+- `linux_theming/wallpaper.py`: read-only session probes, explicit setters and restoration checks.
+- `linux_theming/theme.py`: palette engine access and terminal renderers.
+- `linux_theming/service.py`: profile validation and reviewed plan generation/application.
+- `linux_theming/changes.py`: conflict checks, file replacement and undo journals.
+- `linux_theming/merge.py`: three-way line and INI key merges that keep later outside edits.
+- `linux_theming/paths.py`: HOME/XDG data locations.
 - `bin/walltheme`, `config/`, `scripts/install-thinkpad.sh`: original legacy workflow.
 - `install.sh`, `scripts/install-platform.py`: describe GUI launch options and refuse automatic installation;
   legacy installation requires an explicit `--thinkpad` choice.
@@ -60,7 +60,7 @@ profile's `resolutions`. See [configuration semantics](CONFIGURATION.md). The en
 
 ```sh
 python3 -m unittest discover -s tests -v
-ruff check desktop_theming tests scripts/install-platform.py
+ruff check linux_theming tests scripts/install-platform.py
 bash -n install.sh scripts/install-thinkpad.sh
 ```
 

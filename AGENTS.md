@@ -1,4 +1,4 @@
-# Working on desktop-theming
+# Working on linux-theming
 
 Read `docs/DIRECTION.md` before choosing product scope or architecture.
 
@@ -14,7 +14,7 @@ Read `docs/DIRECTION.md` before choosing product scope or architecture.
 - Keep `bin/walltheme` and `--thinkpad` installation explicitly documented as
   the legacy workflow. The new platform must not call its apply hooks.
 - Document which integrations are discovery-only and which can apply themes.
-- Run `python3 -m unittest discover -s tests -v`, `ruff check desktop_theming
+- Run `python3 -m unittest discover -s tests -v`, `ruff check linux_theming
   tests`, and `bash -n install.sh` for changes to the new platform.
 
 - Rebuild the local AppImage whenever changes affect its bundled code, UI,

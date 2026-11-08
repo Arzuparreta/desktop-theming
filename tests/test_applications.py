@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, integrations, inventory, service, structured, theme
-from desktop_theming.paths import Paths
+from linux_theming import changes, integrations, inventory, service, structured, theme
+from linux_theming.paths import Paths
 
 
 class ApplicationTests(unittest.TestCase):
@@ -92,7 +92,7 @@ class ApplicationTests(unittest.TestCase):
         generation = settings['defaultThemeSetAt']
         self.assertEqual(set(settings), {'defaultTheme', 'defaultThemeSetAt', 'providers'})
         self.assertEqual(settings['providers'], {'example': True})
-        self.assertEqual(settings['defaultTheme'], 'desktop-theming')
+        self.assertEqual(settings['defaultTheme'], 'linux-theming')
         self.assertEqual(set(json.loads(theme_file.read_text())), {'version', 'name', 'appearance', 'canvas', 'accent'})
         self.assertEqual(self.plan(profile)['changes'], [])
         settings['unrelatedFuturePreference'] = ['kept']
@@ -124,7 +124,7 @@ class ApplicationTests(unittest.TestCase):
         self.apply(self.profile('t3code'))
         config.write_text(structured.update(config.read_text(), {('defaultThemeSetAt',): 'manual-change'}))
         for profile in (self.profile('t3code', polarity='light'), service.DEFAULT_PROFILE):
-            with self.assertRaisesRegex(ValueError, 'outside desktop-theming'):
+            with self.assertRaisesRegex(ValueError, 'outside linux-theming'):
                 self.plan(profile)
 
     def test_t3_malformed_json_settings_are_never_rewritten(self):
@@ -140,7 +140,7 @@ class ApplicationTests(unittest.TestCase):
         custom = self.root / 'custom-t3'
         with patch.dict(os.environ, T3CODE_HOME=str(custom)):
             self.apply(self.profile('t3code'))
-            self.assertTrue((custom / 'userdata/themes/desktop-theming.json').exists())
+            self.assertTrue((custom / 'userdata/themes/linux-theming.json').exists())
             self.apply(service.DEFAULT_PROFILE)
         with patch.dict(os.environ, T3CODE_HOME='/outside/home'), self.assertRaisesRegex(ValueError, 'inside HOME'):
             self.plan(self.profile('t3code'))

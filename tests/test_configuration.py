@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from desktop_theming import changes, configuration, inventory, service, theme
-from desktop_theming.paths import Paths
+from linux_theming import changes, configuration, inventory, service, theme
+from linux_theming.paths import Paths
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -213,7 +213,7 @@ class ConfigurationTests(unittest.TestCase):
         self.apply()
         edited = "foreground white\n" + config.read_text()
         config.write_text(edited)
-        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
+        with self.assertRaisesRegex(ValueError, "changed outside linux-theming"):
             self.disconnect()
         self.assertEqual(config.read_text(), edited)
 
@@ -283,7 +283,7 @@ class ConfigurationTests(unittest.TestCase):
         self.apply()
         original = config.read_text()
         config.write_text(original + "\n")
-        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
+        with self.assertRaisesRegex(ValueError, "changed outside linux-theming"):
             self.disconnect()
         self.assertEqual(config.read_text(), original + "\n")
         config.write_text(original)

@@ -56,10 +56,10 @@ personal paths, assumed desktop stack or unrestricted apply hooks. The existing
   adaptive/safe × dark/light combinations. It shows the current wallpaper and
   effective fallback, and lists images recursively. These are concrete daily
   tasks to retain. Its Mod+w binding is a personal example, not a default.
-- `desktop_theming/__main__.py` creates a fresh application/controller/window on
+- `linux_theming/__main__.py` creates a fresh application/controller/window on
   each launch. There is no single-instance activation or quick entry point.
-- `packaging/desktop-theming.desktop` is bundled metadata with
-  `Exec=desktop-theming`. `scripts/install-platform.py` only explains launching
+- `packaging/linux-theming.desktop` is bundled metadata with
+  `Exec=linux-theming`. `scripts/install-platform.py` only explains launching
   and refuses normal `--apply`; there is no user-facing launcher registration.
 - `Controller.refresh()` runs inventory before restoring the remembered image
   folder and generating its palette. Daily use shares startup work with desktop

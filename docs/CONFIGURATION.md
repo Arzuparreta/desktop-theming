@@ -89,7 +89,7 @@ itself writes no files.
 ## Updates, disconnect and undo
 
 Private ownership records live in
-`~/.config/desktop-theming/ownership/COMPONENT.json` (respecting XDG_CONFIG_HOME).
+`~/.config/linux-theming/ownership/COMPONENT.json` (respecting XDG_CONFIG_HOME).
 They retain the original file/link, the base configuration after source removal,
 the owned include block and expected generated theme. Keep them as well as history.
 

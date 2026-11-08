@@ -13,12 +13,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, launcher
-from desktop_theming.paths import Paths
+from linux_theming import changes, launcher
+from linux_theming.paths import Paths
 
 APPIMAGE_HEAD = b"\x7fELF\x02\x01\x01\x00AI\x02" + b"\0" * 53
 SPECIAL_NAMES = [
-    "Desktop Theming.AppImage",
+    "Linux Theming.AppImage",
     "100% theme %u %f.AppImage",
     'quote " and \' apostrophe.AppImage',
     "dollar $HOME `tick` back\\slash.AppImage",
@@ -88,7 +88,7 @@ def entry_values(text):
 
 class LauncherTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-launcher-test-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="linux-theming-launcher-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.paths = Paths(self.root, self.root / "config", self.root / "state")
@@ -100,11 +100,11 @@ class LauncherTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.scratch = self.root / "scratch"
-        roots = patch("desktop_theming.launcher.ephemeral_roots",
+        roots = patch("linux_theming.launcher.ephemeral_roots",
                       return_value=[self.scratch, self.root / "cache"])
         roots.start()
         self.addCleanup(roots.stop)
-        self.image = self.appimage("Applications/Desktop Theming.AppImage")
+        self.image = self.appimage("Applications/Linux Theming.AppImage")
         self.loc = launcher.locations(self.paths)
         # Unrelated engine data that registration must never touch.
         self.paths.profile.parent.mkdir(parents=True)
@@ -167,9 +167,9 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(self.tree(), self.initial_tree())
 
     def initial_tree(self):
-        return sorted(["config", "config/desktop-theming", "config/desktop-theming/profile.json",
-                       "state", "state/desktop-theming", "state/desktop-theming/history",
-                       f"state/desktop-theming/history/{'a' * 32}.json"])
+        return sorted(["config", "config/linux-theming", "config/linux-theming/profile.json",
+                       "state", "state/linux-theming", "state/linux-theming/history",
+                       f"state/linux-theming/history/{'a' * 32}.json"])
 
     def test_generated_entry_parses_with_glib_and_validator(self):
         for name in SPECIAL_NAMES:
@@ -255,8 +255,8 @@ class LauncherTests(unittest.TestCase):
     def test_temporary_mounted_missing_and_non_executable_files_are_refused(self):
         cases = {
             "scratch/Desktop.AppImage": "temporary",
-            "x/.mount_abc/usr/app/desktop-theming": "mounted",
-            "x/DesktopTheming.AppDir/AppRun": "unpacked",
+            "x/.mount_abc/usr/app/linux-theming": "mounted",
+            "x/LinuxTheming.AppDir/AppRun": "unpacked",
         }
         for relative, word in cases.items():
             with self.subTest(relative=relative):
@@ -274,7 +274,7 @@ class LauncherTests(unittest.TestCase):
         self.assertFalse(self.data.exists())
 
     def test_explicit_non_appimage_executable_is_labelled(self):
-        script = self.root / "bin/desktop-theming"
+        script = self.root / "bin/linux-theming"
         script.parent.mkdir()
         script.write_text("#!/bin/sh\nexec true\n")
         script.chmod(0o755)
@@ -313,12 +313,12 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(json.loads(self.loc["journal"].read_text())["status"], "applied")
         written = set(self.tree()) - set(self.initial_tree())
         self.assertEqual(written, {
-            "data", "data/applications", "data/applications/desktop-theming.desktop", "data/icons",
+            "data", "data/applications", "data/applications/linux-theming.desktop", "data/icons",
             "data/icons/hicolor", "data/icons/hicolor/scalable", "data/icons/hicolor/scalable/apps",
-            "data/icons/hicolor/scalable/apps/desktop-theming.svg", "state/desktop-theming/launcher",
-            "state/desktop-theming/launcher/journal.json",
-            "state/desktop-theming/launcher/registration.json",
-            "state/desktop-theming/launcher/registration.lock"})
+            "data/icons/hicolor/scalable/apps/linux-theming.svg", "state/linux-theming/launcher",
+            "state/linux-theming/launcher/journal.json",
+            "state/linux-theming/launcher/registration.json",
+            "state/linux-theming/launcher/registration.lock"})
         again = launcher.plan(self.paths, self.image)
         self.assertEqual((again["operation"], again["changes"], again["applicable"]), ("unchanged", [], False))
         self.assertEqual(launcher.apply_reviewed(self.paths, again)["status"], "unchanged")
@@ -343,13 +343,13 @@ class LauncherTests(unittest.TestCase):
     def test_replaced_executable_changes_review_but_keeps_registration(self):
         reviewed = launcher.plan(self.paths, self.image)
         self.image.unlink()
-        self.appimage("Applications/Desktop Theming.AppImage")
+        self.appimage("Applications/Linux Theming.AppImage")
         os.utime(self.image, ns=(1, 1))
         with self.assertRaisesRegex(ValueError, "out of date"):
             launcher.apply_reviewed(self.paths, reviewed)
         self.register()
         self.image.unlink()
-        self.appimage("Applications/Desktop Theming.AppImage")  # e.g. a newer release
+        self.appimage("Applications/Linux Theming.AppImage")  # e.g. a newer release
         self.assertFalse(launcher.status(self.paths)["repair_needed"])
         self.assertEqual(launcher.plan(self.paths, self.image)["operation"], "unchanged")
 
@@ -364,7 +364,7 @@ class LauncherTests(unittest.TestCase):
             launcher.apply_reviewed(self.paths, result)
         self.assertEqual(launcher.status(self.paths)["conflicts"], [str(self.loc["launcher"])])
         self.loc["launcher"].unlink()
-        target = self.root / "dotfiles/desktop-theming.desktop"
+        target = self.root / "dotfiles/linux-theming.desktop"
         target.parent.mkdir()
         target.write_text("dotfiles entry\n")
         self.loc["launcher"].symlink_to(target)
@@ -455,7 +455,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_repair_after_moving_executable(self):
         self.register()
-        moved = self.root / "Applications/Moved/Desktop Theming.AppImage"
+        moved = self.root / "Applications/Moved/Linux Theming.AppImage"
         moved.parent.mkdir()
         self.image.rename(moved)
         state = launcher.status(self.paths)
@@ -492,7 +492,7 @@ class LauncherTests(unittest.TestCase):
                 raise exception("simulated failure")
             return original(paths, path, state, record, journal)
 
-        return patch("desktop_theming.launcher._write", side_effect=write)
+        return patch("linux_theming.launcher._write", side_effect=write)
 
     def test_partial_failure_rolls_back_written_files(self):
         reviewed = launcher.plan(self.paths, self.image)

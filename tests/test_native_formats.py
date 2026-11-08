@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import appearance, changes, service, theme
-from desktop_theming.paths import Paths
+from linux_theming import appearance, changes, service, theme
+from linux_theming.paths import Paths
 
 
 class NativeFormatTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class NativeFormatTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("rofi") and shutil.which("Xvfb"), "Rofi parsing requires an existing private Xvfb")
     def test_rofi_parser_accepts_rasi_on_a_private_display(self):
-        from desktop_theming.smoke_wallpaper import private_display
+        from linux_theming.smoke_wallpaper import private_display
 
         with tempfile.TemporaryDirectory(prefix="rofi-parser-") as private:
             root = Path(private)

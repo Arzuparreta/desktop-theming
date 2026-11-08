@@ -13,12 +13,12 @@ reopen it yourself.
 
 | Integration | Managed changes | Conditions and activation |
 |---|---|---|
-| Konsole | Generated `DesktopTheming.colorscheme` and the existing default user profile's `Appearance/ColorScheme` | Default profile must already exist under `$XDG_DATA_HOME/konsole` (default `~/.local/share/konsole`) and be selected in `konsolerc`. Fonts, commands and other profiles are kept. System/built-in profiles need a user profile first. Reopen Konsole |
+| Konsole | Generated `LinuxTheming.colorscheme` and the existing default user profile's `Appearance/ColorScheme` | Default profile must already exist under `$XDG_DATA_HOME/konsole` (default `~/.local/share/konsole`) and be selected in `konsolerc`. Fonts, commands and other profiles are kept. System/built-in profiles need a user profile first. Reopen Konsole |
 | GNOME Terminal | Native background, foreground, sixteen ANSI colors, cursor and selection in the existing default profile | Requires GSettings, the GNOME Terminal schemas, a session bus and writable keys; works outside GNOME. No profile is created. Default-profile changes block update/undo until restored. Existing terminals may update immediately |
 | VS Code | User `workbench.colorCustomizations` for interface and integrated terminal colors | Conventional `Code/User/settings.json` only, including JSONC comments/trailing commas. Keep syntax theme, extensions, fonts, other custom colors and theme-scoped overrides. Workspace/named-profile/remote settings may override user colors. No extension installation |
-| btop | Generated `btop/themes/desktop-theming.theme` and `color_theme` selection | Keep layout, update interval, meters and all other preferences. Terminal transparency/theme-background settings remain effective. Reopen btop or select the theme in its menu |
+| btop | Generated `btop/themes/linux-theming.theme` and `color_theme` selection | Keep layout, update interval, meters and all other preferences. Terminal transparency/theme-background settings remain effective. Reopen btop or select the theme in its menu |
 | tmux | Generated color styles loaded through `source-file` in `~/.tmux.conf` or existing `$XDG_CONFIG_HOME/tmux/tmux.conf` | Both conventional configs together are ambiguous and blocked. Keep bindings, plugins and status text. No server connection during discovery/review/apply; manually source the config or start a new server. Existing local options can override global styles |
-| T3 Code | Native seeded JSON theme in `.t3/userdata/themes/desktop-theming.json`, plus environment `defaultTheme` and `defaultThemeSetAt` | Uses T3's existing theme publication/settings watchers. No CSS injection, application patching, provider/project/agent edits or process reload. Connected desktop/web clients may follow immediately; mobile keeps its own appearance. See the scope below |
+| T3 Code | Native seeded JSON theme in `.t3/userdata/themes/linux-theming.json`, plus environment `defaultTheme` and `defaultThemeSetAt` | Uses T3's existing theme publication/settings watchers. No CSS injection, application patching, provider/project/agent edits or process reload. Connected desktop/web clients may follow immediately; mobile keeps its own appearance. See the scope below |
 | Kitty / Ghostty | Terminal palette, selection and supported UI color directives, through a marked include | Existing color/include inspection; Ghostty's two conventional config names must not coexist. Reopen or reload the terminal |
 | Alacritty | Primary, cursor, selection and sixteen ANSI colors in `alacritty/alacritty.toml` | Modern TOML only. Legacy `.yml`/`.yaml`, imports and ambiguous inline/quoted color tables require explicit manual migration or export. Unrelated TOML values are compared before accepting an edit |
 | foot | Legacy `[colors]`/`[colors2]` or modern `[colors-dark]`/`[colors-light]` palettes | Review reads `foot --version`: 1.26+ uses modern sections (old names were removed in 1.28). Old headers/theme indices are migrated while retaining other values. Root main preferences or explicit `[main]` both work. Standalone exports use modern syntax. Reopen terminals |
@@ -184,7 +184,7 @@ directory and selecting an environment theme through `userdata/settings.json`.
 This adapter uses that existing contract: a version-1 seed with `name`,
 `appearance`, `canvas` and `accent`. T3 derives its own interface/editor palette;
 we do not write its CSS, Electron preferences, databases or client local storage.
-Only the `desktop-theming` theme and the two environment-theme keys are managed.
+Only the `linux-theming` theme and the two environment-theme keys are managed.
 `defaultThemeSetAt` is T3's opaque generation string (up to 64 characters); a
 new publication gets a stable reviewable generation, so connected clients can
 follow it without a reload. Theme updates preserve all other settings, including

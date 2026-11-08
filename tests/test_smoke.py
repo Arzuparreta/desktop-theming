@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming.smoke import isolated_environment
+from linux_theming.smoke import isolated_environment
 
 
 @unittest.skipUnless(importlib.util.find_spec("PIL"), "Install Pillow for bundled diagnostics")

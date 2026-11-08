@@ -1,6 +1,6 @@
 # Linux Theming
 
-<img src="desktop_theming/ui/icon.svg" width="96" height="96" alt="Linux Theming: Tux with three theme color swatches">
+<img src="linux_theming/ui/icon.svg" width="96" height="96" alt="Linux Theming: Tux with three theme color swatches">
 
 Icon: Tux by Larry Ewing (lewing@isc.tamu.edu), created with The GIMP;
 cropped and combined with theme colors. See [artwork attribution](packaging/THIRD_PARTY.md#icon-artwork).
@@ -29,7 +29,7 @@ Open the built `dist/LinuxTheming-x86_64.AppImage`, or prepare a source checkout
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-gui.txt
-.venv/bin/python -m desktop_theming
+.venv/bin/python -m linux_theming
 ```
 
 Opening the application and previewing colors do not change desktop settings.
@@ -115,14 +115,20 @@ See [validation evidence and limitations](docs/DEVELOPMENT.md#support-evidence).
 
 ## Local data and recovery
 
+Upgrading from Desktop Theming reads your existing setup first. **Review
+migration…** shows the exact changes before moving active data and references.
+Old history remains available for ordered undo. Registered menu entries have a
+separate reviewed update in **Access…**. See [migration and recovery](docs/MIGRATION.md)
+before deleting old directories or returning to an older version.
+
 Respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`, with these normal defaults:
 
 ```text
-~/.config/desktop-theming/profile.json        selected components and theme settings
-~/.config/desktop-theming/themes/*.conf      generated terminal/Qt palettes
-~/.config/desktop-theming/ownership/*.json   original configuration and owned integration
-~/.local/state/desktop-theming/history/      undo/recovery journals
-~/.local/state/desktop-theming/launcher/     optional menu registration and recovery
+~/.config/linux-theming/profile.json        selected components and theme settings
+~/.config/linux-theming/themes/*.conf      generated terminal/Qt palettes
+~/.config/linux-theming/ownership/*.json   original configuration and owned integration
+~/.local/state/linux-theming/history/      undo/recovery journals
+~/.local/state/linux-theming/launcher/     optional menu registration and recovery
 ```
 
 Preserve ownership records and history to retain restoration data. They contain

@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, service, wallpaper
-from desktop_theming.paths import Paths
+from linux_theming import changes, service, wallpaper
+from linux_theming.paths import Paths
 
 
 class WallpaperTests(unittest.TestCase):
