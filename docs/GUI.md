@@ -120,6 +120,11 @@ Replacing the AppImage at the same path keeps the entry working. Moving it
 requires **Update entry…** from the new location. **Remove entry…** leaves the
 AppImage, profile and theme history in place. Registration, update, removal and
 interrupted recovery are reviewed and conflict-checked; edited files are kept.
+The shortcut command uses the currently running AppImage, including before
+repairing an older menu entry. A menu pointing to another copy is flagged even
+if that copy still exists. Update existing keyboard shortcuts yourself using
+**Copy command**; updating the menu does not change those bindings. If neither
+the running copy nor the registered executable is usable, no command is offered.
 
 Repeated launches activate the existing window for the same user, profile and
 graphical session. IPC accepts navigation only. An older running version is

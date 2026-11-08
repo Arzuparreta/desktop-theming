@@ -241,7 +241,7 @@ def _probe(paths, image, backend, tool, **extra):
         for record in changes.history(paths):
             if record['status'] != 'applied':
                 continue
-            journal = json.loads((paths.history / (record['id'] + '.json')).read_text())
+            journal = json.loads(paths.journal(record['id']).read_text())
             previous = journal.get('wallpaper_action')
             if (previous and previous['backend'] == 'feh' and previous['session'] == action['session']
                     and previous['after'] == root):
