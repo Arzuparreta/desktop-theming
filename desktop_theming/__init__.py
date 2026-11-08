@@ -1,3 +1,1 @@
-"""Modular, opt-in Linux desktop theming."""
-
-__version__ = "0.4.1"
+"""Compatibility launcher namespace. Use linux_theming for new code."""

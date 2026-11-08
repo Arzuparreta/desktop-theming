@@ -51,8 +51,8 @@ COMPONENTS = (
     ("swaybg", "swaybg", "Wallpaper", ("swaybg",), ("swaybg",), ()),
 )
 SUPPORTED = {"kitty", "ghostty", "gnome", "xfce", "gnome-terminal"} | set(integrations.FILES)
-START = "# BEGIN desktop-theming"
-END = "# END desktop-theming"
+START = "# BEGIN linux-theming"
+END = "# END linux-theming"
 
 
 def processes(proc=Path("/proc")):
@@ -184,7 +184,7 @@ def discover(paths, *, running=None, which=None, environ=None):
                 if (item["configuration"]["ownership_record"] and not item["managed"]
                         and not item["configuration"]["issues"]):
                     item["configuration"]["issues"].append(
-                        "Managed colors were changed outside desktop-theming; resolve them before applying.")
+                        "Managed colors were changed outside linux-theming; resolve them before applying.")
             except (OSError, ValueError) as exc:
                 item["configuration"] = {"issues": [str(exc)], "sources": []}
         if category == "Session":

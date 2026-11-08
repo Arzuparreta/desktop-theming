@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, integrations, inventory, rofi, service, theme, wallpaper
-from desktop_theming.paths import Paths
+from linux_theming import changes, integrations, inventory, rofi, service, theme, wallpaper
+from linux_theming.paths import Paths
 
 
 def rule_map(text):
@@ -179,9 +179,9 @@ class RofiTests(unittest.TestCase):
         stock.write_text('window { width: 35em; }\nelement-text.selected.normal { text-color: white; }\n')
         applied = self.apply(dict(self.profile, polarity='light'))
         self.config.write_text(self.config.read_text().replace('background-color: #', 'background-color: #f', 1))
-        with self.assertRaisesRegex(ValueError, 'outside desktop-theming'):
+        with self.assertRaisesRegex(ValueError, 'outside linux-theming'):
             self.plan()
-        with self.assertRaisesRegex(ValueError, 'outside desktop-theming|conflict'):
+        with self.assertRaisesRegex(ValueError, 'outside linux-theming|conflict'):
             changes.review_undo(self.paths, applied['id'])
 
     def test_media_child_states_and_highlight_styles_are_recolored_without_layout_edits(self):

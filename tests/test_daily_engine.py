@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from desktop_theming import changes, inventory, presentation, service, theme
-from desktop_theming.paths import Paths
+from linux_theming import changes, inventory, presentation, service, theme
+from linux_theming.paths import Paths
 
 
 class DailyEngineTests(unittest.TestCase):
@@ -94,7 +94,7 @@ class DailyEngineTests(unittest.TestCase):
                            ("set_wallpaper", True)):
             changed = dict(plan, profile=dict(updated, **{key: value}))
             self.assertEqual(presentation.review_level(self.paths, changed, profile), "attention")
-        warned = dict(plan, warnings=plan["warnings"] + ["kitty: keep edits made outside desktop-theming"])
+        warned = dict(plan, warnings=plan["warnings"] + ["kitty: keep edits made outside linux-theming"])
         self.assertEqual(presentation.review_level(self.paths, warned, profile), "attention")
 
     def test_history_names_the_theme_and_old_journals_still_undo(self):

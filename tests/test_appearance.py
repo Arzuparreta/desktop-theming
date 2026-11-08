@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import appearance, changes, inventory, service
-from desktop_theming.paths import Paths
+from linux_theming import appearance, changes, inventory, service
+from linux_theming.paths import Paths
 
 
 class AppearanceTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class AppearanceTests(unittest.TestCase):
         self.accents = True
         self.profile = dict(copy.deepcopy(service.DEFAULT_PROFILE), mode="safe", components=["gnome"],
                             resolutions={"gnome": {"replace_colors": True}})
-        command = patch("desktop_theming.appearance.command", side_effect=self.command)
+        command = patch("linux_theming.appearance.command", side_effect=self.command)
         command.start()
         self.addCleanup(command.stop)
 
@@ -175,7 +175,7 @@ class AppearanceTests(unittest.TestCase):
         self.values = {"/Net/ThemeName": "Adwaita"}
         self.profile = dict(self.profile, components=["xfce"], resolutions={"xfce": {"replace_colors": True}})
         with patch.dict(os.environ, XDG_CURRENT_DESKTOP="XFCE"), patch(
-                "desktop_theming.inventory.processes", return_value={"xfconfd"}):
+                "linux_theming.inventory.processes", return_value={"xfconfd"}):
             plan = self.plan()
             self.assertFalse(self.setters())
             self.assertEqual(plan["settings_actions"][0]["after"], {"/Net/ThemeName": "Adwaita-dark"})
@@ -192,6 +192,6 @@ class AppearanceTests(unittest.TestCase):
         self.values = {"/Net/ThemeName": "Adwaita"}
         profile = dict(self.profile, components=["xfce"], resolutions={"xfce": {"replace_colors": True}})
         with patch.dict(os.environ, XDG_CURRENT_DESKTOP="XFCE"), patch(
-                "desktop_theming.inventory.processes", return_value=set()), self.assertRaisesRegex(ValueError, "not running"):
+                "linux_theming.inventory.processes", return_value=set()), self.assertRaisesRegex(ValueError, "not running"):
             self.plan(profile)
         self.assertFalse(self.calls)

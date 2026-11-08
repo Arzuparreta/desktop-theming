@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import wallpaper
+from linux_theming import wallpaper
 
 
 class WallpaperCommandTests(unittest.TestCase):

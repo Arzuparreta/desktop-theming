@@ -4,8 +4,8 @@ Version=1.5
 Name=Linux Theming
 GenericName=Linux desktop theme control
 Comment=Compose and review reversible desktop colors
-Exec=desktop-theming
-Icon=desktop-theming
+Exec=linux-theming
+Icon=linux-theming
 Categories=Settings;DesktopSettings;
 Keywords=theme;colors;wallpaper;palette;
 Terminal=false
@@ -14,8 +14,8 @@ Actions=quick;center;
 
 [Desktop Action quick]
 Name=Quick theme change
-Exec=desktop-theming --quick
+Exec=linux-theming --quick
 
 [Desktop Action center]
 Name=Control center
-Exec=desktop-theming --center
+Exec=linux-theming --center

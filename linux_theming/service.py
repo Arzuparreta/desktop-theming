@@ -40,6 +40,7 @@ def validate_profile(value):
 
 
 def load_profile(paths):
+    paths.verify_identity()
     if not paths.profile.exists():
         return dict(DEFAULT_PROFILE, components=[])
     try:
@@ -66,6 +67,13 @@ def attach(text, component, output):
 
 
 def make_plan(paths, profile, *, which=None):
+    from . import migration
+    from .paths import LEGACY_ID
+
+    migration.guard(paths)
+    if paths.app_id == LEGACY_ID:
+        raise ValueError("Review the Linux Theming data migration in Access options before applying themes. "
+                         "Your existing profile and undo history are preserved.")
     pending = [item for item in changes.history(paths) if item["status"] in
                ("prepared", "recovery-needed", "undoing")]
     if pending:
@@ -97,7 +105,7 @@ def make_plan(paths, profile, *, which=None):
         record = integrations.load(paths, component)
         edited = integrations.carried(paths, record) if record else []
         if edited:
-            warnings.append(f"{component}: keep the changes made outside desktop-theming to "
+            warnings.append(f"{component}: keep the changes made outside linux-theming to "
                             + ", ".join(edited) + " since they were themed.")
         if component in removed:
             warnings.append(f"Disconnect {component}: restore its recorded previous appearance settings.")
@@ -150,7 +158,7 @@ def make_plan(paths, profile, *, which=None):
         text = changes.text_of(current)
         if record:
             text = ownership.verify(paths, component, record, config, current)
-        elif inventory.START in text or inventory.END in text:
+        elif configuration.has_block(text):
             configuration.split_block(text)  # Give malformed blocks a precise error.
             raise ValueError(f"Unowned managed block in {config}; resolve it or undo before connecting.")
         options = profile["resolutions"].get(component, {})
@@ -166,7 +174,7 @@ def make_plan(paths, profile, *, which=None):
             source = next((s for s in report["sources"] if s["kind"] == "color" or s.get("colors")),
                           {"path": str(config), "directive": "", "line": "?"})
             raise changes.Conflict(f"{source['path']}: the color setting {source['directive']} on line "
-                                   f"{source['line']} was added outside desktop-theming after it was applied. "
+                                   f"{source['line']} was added outside linux-theming after it was applied. "
                                    "Your edit is kept; remove it or disconnect before trying again.")
         base = configuration.prepare(text, report,
                                      replace_colors=not record and options.get("replace_colors", False))

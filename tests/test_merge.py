@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from desktop_theming import formats, merge
+from linux_theming import formats, merge
 
 HAS_QT = importlib.util.find_spec("PySide6") is not None
 
@@ -71,7 +71,7 @@ class IniMergeTests(unittest.TestCase):
 
 
 class QSettingsSpellingTests(unittest.TestCase):
-    values = ["/home/me/.config/desktop-theming/themes/qt-colors.conf", '/x/config #1 "quoted"/a.conf',
+    values = ["/home/me/.config/linux-theming/themes/qt-colors.conf", '/x/config #1 "quoted"/a.conf',
               "/a,b;c=d", " padded ", "/home/rubén/a\tb", "/emoji/😀", "@literal", "\\back\\slash"]
 
     def test_plain_paths_are_written_like_qsettings(self):

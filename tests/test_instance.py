@@ -15,8 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from desktop_theming import __main__ as entry
-from desktop_theming import instance
+from linux_theming import __main__ as entry
+from linux_theming import instance
 
 HAS_QT = importlib.util.find_spec("PySide6") is not None
 REPO = Path(__file__).resolve().parents[1]
@@ -30,8 +30,8 @@ if HAS_QT:
 PRIMARY = """
 import json, sys, time
 from PySide6.QtCore import QCoreApplication, QTimer
-from desktop_theming import instance
-from desktop_theming.paths import Paths
+from linux_theming import instance
+from linux_theming.paths import Paths
 app = QCoreApplication([])
 claimed = instance.claim(Paths.current(), timeout=2)
 print(claimed.role, flush=True)
@@ -50,8 +50,8 @@ server.close()
 
 CLIENT = """
 import sys
-from desktop_theming import instance
-from desktop_theming.paths import Paths
+from linux_theming import instance
+from linux_theming.paths import Paths
 claimed = instance.claim(Paths.current(), sys.argv[1], timeout=5)
 print(claimed.role, claimed.reply.get("status", ""), flush=True)
 claimed.release()
@@ -82,7 +82,7 @@ class ProtocolTests(unittest.TestCase):
             instance.request_message("apply")
 
     def test_other_protocols_reduce_to_show(self):
-        data = json.dumps({"app": "desktop-theming", "protocol": 2, "version": "1.0.0",
+        data = json.dumps({"app": "linux-theming", "protocol": 2, "version": "1.0.0",
                            "request": "apply-everything", "new": True}).encode() + b"\n"
         self.assertEqual(instance.parse_request(data),
                          {"protocol": 2, "version": "1.0.0", "request": "show", "token": ""})
@@ -113,7 +113,7 @@ class ProtocolTests(unittest.TestCase):
 
 class EndpointTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-instance-test-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="linux-theming-instance-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.runtime = self.root / "runtime"
@@ -141,15 +141,15 @@ class EndpointTests(unittest.TestCase):
     def test_private_subdirectory_is_validated(self):
         target = self.root / "elsewhere"
         target.mkdir(mode=0o700)
-        (self.runtime / "desktop-theming").symlink_to(target)
+        (self.runtime / "linux-theming").symlink_to(target)
         with self.assertRaisesRegex(instance.Unavailable, "link"):
             instance.endpoint(self.paths, self.environ)
-        (self.runtime / "desktop-theming").unlink()
-        (self.runtime / "desktop-theming").mkdir(mode=0o755)
-        (self.runtime / "desktop-theming").chmod(0o755)
+        (self.runtime / "linux-theming").unlink()
+        (self.runtime / "linux-theming").mkdir(mode=0o755)
+        (self.runtime / "linux-theming").chmod(0o755)
         place = instance.endpoint(self.paths, self.environ)
-        self.assertEqual((self.runtime / "desktop-theming").stat().st_mode & 0o777, 0o700)
-        self.assertEqual(place["socket"].parent, self.runtime / "desktop-theming")
+        self.assertEqual((self.runtime / "linux-theming").stat().st_mode & 0o777, 0o700)
+        self.assertEqual(place["socket"].parent, self.runtime / "linux-theming")
         self.assertEqual(list(target.iterdir()), [])
 
     def test_identity_separates_sessions_and_profiles(self):
@@ -192,7 +192,7 @@ class ServerTests(unittest.TestCase):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-instance-test-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="linux-theming-instance-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.runtime = self.root / "runtime"
@@ -258,7 +258,7 @@ class ServerTests(unittest.TestCase):
         with patch.object(instance, "__version__", "9.0.0"):
             message = instance._forwarded(reply)
         self.assertIn("explains how to switch to 9.0.0", message)
-        future = json.dumps({"app": "desktop-theming", "protocol": 5, "version": "5.0",
+        future = json.dumps({"app": "linux-theming", "protocol": 5, "version": "5.0",
                              "request": "apply"}).encode() + b"\n"
         self.run_in_thread(lambda: self.raw(claimed.socket, future))
         self.assertEqual(self.received[1][0], "show")
@@ -347,7 +347,7 @@ class ProcessTests(unittest.TestCase):
     """Separate processes, as real launches are: races, crashes and sessions."""
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-instance-proc-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="linux-theming-instance-proc-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         runtime = self.root / "runtime"
@@ -361,8 +361,11 @@ class ProcessTests(unittest.TestCase):
         self.environ.pop("XDG_ACTIVATION_TOKEN", None)
         self.paths = SimpleNamespace(home=self.root, config=self.root / "config", state=self.root / "state")
 
-    def primary(self, lifetime=8000, startup_delay=0):
-        process = subprocess.Popen([sys.executable, "-c", PRIMARY, str(lifetime), str(startup_delay)], env=self.environ,
+    def primary(self, lifetime=8000, startup_delay=0, *, legacy=False):
+        code = PRIMARY
+        if legacy:
+            code = code.replace("from linux_theming import instance", "from tests.fixtures.legacy_041 import instance")
+        process = subprocess.Popen([sys.executable, "-c", code, str(lifetime), str(startup_delay)], env=self.environ,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=self.root)
         def cleanup():
             if process.poll() is None:
@@ -372,6 +375,23 @@ class ProcessTests(unittest.TestCase):
         lines = self.read_until(process, "READY")
         self.assertEqual(lines[0], "primary")
         return process
+
+    def test_new_launcher_forwards_to_the_published_old_primary(self):
+        primary = self.primary(legacy=True)
+        follower = self.client("quick")
+        self.assertEqual(follower.communicate(timeout=10)[0].strip(), "forwarded activated")
+        received = self.read_until(primary, "REQ")[-1]
+        self.assertIn('REQ ["quick"', received)
+        self.assertIn("close this window", received)
+
+    def test_published_old_launcher_forwards_to_the_new_primary(self):
+        primary = self.primary()
+        code = CLIENT.replace("from linux_theming import instance", "from tests.fixtures.legacy_041 import instance")
+        follower = subprocess.run([sys.executable, "-c", code, "center"], env=self.environ,
+                                  capture_output=True, text=True, cwd=self.root, timeout=10)
+        self.assertEqual(follower.returncode, 0, follower.stderr)
+        self.assertEqual(follower.stdout.strip(), "forwarded activated")
+        self.assertIn('REQ ["center"', self.read_until(primary, "REQ")[-1])
 
     def read_until(self, process, marker, timeout=15):
         lines, deadline = [], time.monotonic() + timeout
@@ -443,7 +463,7 @@ class ProcessTests(unittest.TestCase):
 
     def test_entry_point_forwards_instead_of_opening_a_window(self):
         primary = self.primary()
-        result = subprocess.run([sys.executable, "-m", "desktop_theming", "--quick"], env=self.environ,
+        result = subprocess.run([sys.executable, "-m", "linux_theming", "--quick"], env=self.environ,
                                 capture_output=True, text=True, timeout=60, cwd=self.root)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('REQ ["quick", "", ""]', self.read_until(primary, "REQ")[-1])

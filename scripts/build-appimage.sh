@@ -18,26 +18,26 @@ if [[ ! -f "$appimage_runtime" ]]; then
     exit 1
 fi
 cd "$repo"
-"$python_bin" -m PyInstaller --noconfirm --clean packaging/desktop-theming.spec
+"$python_bin" -m PyInstaller --noconfirm --clean packaging/linux-theming.spec
 appdir="$repo/build/LinuxTheming.AppDir"
 # Only remove our generated directory, never a caller-supplied path.
 rm -rf -- "$appdir"
 mkdir -p "$appdir/usr"
-cp -a dist/desktop-theming "$appdir/usr/app"
-install -m 644 packaging/desktop-theming.desktop "$appdir/desktop-theming.desktop"
+cp -a dist/linux-theming "$appdir/usr/app"
+install -m 644 packaging/linux-theming.desktop "$appdir/linux-theming.desktop"
 # File managers and AppImage tools read .DirIcon, which the AppImage format
 # expects to be a PNG. Ship it as a regular file, plus hicolor theme icons.
-install -m 644 assets/icon.png "$appdir/desktop-theming.png"
+install -m 644 assets/icon.png "$appdir/linux-theming.png"
 install -m 644 assets/icon.png "$appdir/.DirIcon"
-install -D -m 644 assets/icon.png "$appdir/usr/share/icons/hicolor/256x256/apps/desktop-theming.png"
-install -D -m 644 desktop_theming/ui/icon.svg "$appdir/usr/share/icons/hicolor/scalable/apps/desktop-theming.svg"
+install -D -m 644 assets/icon.png "$appdir/usr/share/icons/hicolor/256x256/apps/linux-theming.png"
+install -D -m 644 linux_theming/ui/icon.svg "$appdir/usr/share/icons/hicolor/scalable/apps/linux-theming.svg"
 cat > "$appdir/AppRun" <<'EOF'
 #!/bin/sh
 appdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # Keep the user's PATH and XDG roots: discovery must inspect the host, not the bundle.
 # Qt is private to the frozen process; do not inherit another app's Qt plugins.
 unset QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH
-exec "$appdir/usr/app/desktop-theming" "$@"
+exec "$appdir/usr/app/linux-theming" "$@"
 EOF
 chmod +x "$appdir/AppRun"
 export ARCH="${ARCH:-$(uname -m)}"

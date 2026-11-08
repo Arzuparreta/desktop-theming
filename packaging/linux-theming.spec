@@ -16,7 +16,7 @@ analysis = Analysis(
     [str(root / 'packaging/launcher.py')],
     pathex=[str(root)],
     hookspath=[str(root / "packaging/hooks")],
-    datas=[(str(root / 'desktop_theming/ui'), 'desktop_theming/ui'),
+    datas=[(str(root / 'linux_theming/ui'), 'linux_theming/ui'),
            (str(root / 'bin/walltheme'), 'bin')] + notices,
     hiddenimports=['PIL.Image', 'PIL.ImageOps', 'PIL.ImageStat'],
     excludes=['PySide6.QtWebEngineCore', 'PySide6.QtWebEngineQuick',
@@ -29,6 +29,6 @@ analysis.binaries = [item for item in analysis.binaries
                      if Path(item[0]).name != 'libstdc++.so.6']
 pyz = PYZ(analysis.pure)
 exe = EXE(pyz, analysis.scripts, [], exclude_binaries=True,
-          name='desktop-theming', console=True, strip=False, upx=False)
+          name='linux-theming', console=True, strip=False, upx=False)
 coll = COLLECT(exe, analysis.binaries, analysis.datas,
-               strip=False, upx=False, name='desktop-theming')
+               strip=False, upx=False, name='linux-theming')

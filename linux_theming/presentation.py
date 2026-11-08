@@ -100,7 +100,7 @@ def activation_guidance(profile):
         "konsole": "Reopen Konsole to load the colors in its default user profile.",
         "gnome-terminal": "The default GNOME Terminal profile was configured; existing terminals may update immediately.",
         "vscode": "VS Code may notice the user color settings immediately. Workspace and named-profile overrides can take precedence.",
-        "btop": "Reopen btop or select desktop-theming in its theme menu.",
+        "btop": "Reopen btop or select linux-theming in its theme menu.",
         "tmux": "Use tmux's own source-file action on your configuration yourself, or start a new server. Existing window/session options may override these defaults.",
         "t3code": "T3 Code watches its native theme files and environment default. Connected web/desktop clients may follow immediately; mobile keeps its own appearance.",
         "rofi": "Open Rofi again to read its saved colors.",
@@ -175,9 +175,9 @@ def describe_file(paths, item):
     path = Path(item["path"])
     if path == paths.profile:
         return "Palette and application choices"
-    if path.parent == paths.config / "desktop-theming/themes":
+    if path.parent == paths.config / "linux-theming/themes":
         return f"{path.stem.title()} palette"
-    if path.parent == paths.config / "desktop-theming/ownership":
+    if path.parent == paths.config / "linux-theming/ownership":
         return f"{path.stem.title()} restoration data"
     return f"{path.parent.name.title()} configuration"
 
@@ -196,7 +196,7 @@ def problem(context, detail):
                 "body": "Those changes are kept and nothing was overwritten. Show details to see the file and "
                         "setting, put that setting back or edit it yourself, then check again.",
                 "action": "refresh", "label": "Check again"}
-    if context in ("apply", "restore", "review") and "outside desktop-theming" in detail:
+    if context in ("apply", "restore", "review") and "outside linux-theming" in detail:
         return conflict
     if context in ("apply", "restore"):
         if "stale" in detail or "changed since review" in detail:

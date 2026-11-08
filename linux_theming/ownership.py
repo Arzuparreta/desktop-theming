@@ -38,16 +38,16 @@ def verify(paths, component, record, config, current):
     if record["path"] != str(config):
         raise ValueError(f"Configuration path changed for {component}; restore it or undo first.")
     if current["kind"] != "file":
-        raise changes.Conflict(f"{config} was replaced or removed outside desktop-theming after it was "
+        raise changes.Conflict(f"{config} was replaced or removed outside linux-theming after it was "
                                "applied. Your version is kept; resolve it or undo before trying again.")
     text, block = configuration.split_block(changes.text_of(current))
     if block != record["block"]:
-        raise changes.Conflict(f"{config}: the desktop-theming block was changed outside desktop-theming "
+        raise changes.Conflict(f"{config}: the linux-theming block was changed outside linux-theming "
                                "after it was applied. Your edit is kept; restore the block or undo before "
                                "trying again.")
     if changes.snapshot(paths.theme(component)) != record["theme"]:
         raise changes.Conflict(f"{paths.theme(component)}: this generated file was changed outside "
-                               "desktop-theming after it was applied. Your version is kept; restore or "
+                               "linux-theming after it was applied. Your version is kept; restore or "
                                "remove it before trying again.")
     return text
 
