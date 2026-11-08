@@ -58,10 +58,12 @@ jobs:
           bash -n install.sh scripts/build-appimage.sh
       - name: Fetch pinned appimagetool
         run: |
-          curl --fail --location --output "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 2 \
+            --output "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum --check
           chmod +x "$RUNNER_TEMP/appimagetool"
-          curl --fail --location --output "$RUNNER_TEMP/appimage-runtime" https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 2 \
+            --output "$RUNNER_TEMP/appimage-runtime" https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
           echo "617aa77314d57c8b8e4fae9c3f0b35af7b30d5529cb69e98f64f92510ed98a46  $RUNNER_TEMP/appimage-runtime" | sha256sum --check
       - name: Build AppImage
         run: APPIMAGETOOL="$RUNNER_TEMP/appimagetool" APPIMAGE_RUNTIME="$RUNNER_TEMP/appimage-runtime" scripts/build-appimage.sh
