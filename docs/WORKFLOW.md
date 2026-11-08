@@ -41,7 +41,7 @@ end-to-end integration, and defers residency until launch measurements justify i
 
 ## Outcome
 
-A returning user should be able to summon Desktop Theming, find or shuffle an
+A returning user should be able to summon Linux Theming, find or shuffle an
 image, see the proposed result and affected applications, approve it and return
 to work using the keyboard. Initial composition belongs in the full control
 center; repeating a theme change should not repeat setup.

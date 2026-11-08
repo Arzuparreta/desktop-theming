@@ -19,7 +19,7 @@ if [[ ! -f "$appimage_runtime" ]]; then
 fi
 cd "$repo"
 "$python_bin" -m PyInstaller --noconfirm --clean packaging/desktop-theming.spec
-appdir="$repo/build/DesktopTheming.AppDir"
+appdir="$repo/build/LinuxTheming.AppDir"
 # Only remove our generated directory, never a caller-supplied path.
 rm -rf -- "$appdir"
 mkdir -p "$appdir/usr"
@@ -43,8 +43,8 @@ chmod +x "$appdir/AppRun"
 export ARCH="${ARCH:-$(uname -m)}"
 export APPIMAGE_EXTRACT_AND_RUN=1
 # Publish by rename so an already-running AppImage keeps its original inode.
-artifact="$repo/dist/DesktopTheming-$ARCH.AppImage"
-partial="$repo/dist/.DesktopTheming-$ARCH-$$.AppImage"
+artifact="$repo/dist/LinuxTheming-$ARCH.AppImage"
+partial="$repo/dist/.LinuxTheming-$ARCH-$$.AppImage"
 trap 'rm -f -- "$partial"' EXIT
 "$appimage_tool" --runtime-file "$appimage_runtime" "$appdir" "$partial"
 mv -f -- "$partial" "$artifact"

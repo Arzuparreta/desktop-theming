@@ -25,7 +25,7 @@ def main():
             os.execv("/bin/bash", ["bash", str(repo / "scripts/install-thinkpad.sh")])
         print("No changes. To choose this legacy setup explicitly: ./install.sh --thinkpad --apply")
         return
-    message = ("Use the Desktop Theming AppImage, or run .venv/bin/python -m desktop_theming "
+    message = ("Use the Linux Theming AppImage, or run .venv/bin/python -m desktop_theming "
                "after installing requirements-gui.txt in an isolated virtual environment.")
     if args.apply:
         raise SystemExit(message + " Automatic installation is not provided. No changes were made.")

@@ -73,17 +73,17 @@ thumbnailer: for example, Thunar needs `tumbler` and an AppImage thumbnailer.
 # leaves it there; /tmp is often a small RAM disk. Use the ignored build directory.
 export TMPDIR="$PWD/build/smoke-tmp"; mkdir -p "$TMPDIR"
 # This diagnostic always uses a fresh temporary HOME/XDG, including in the bundle.
-APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
+APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --smoke-test
 # Exercise X11/OpenGL with the host's graphics drivers, also in temporary HOME/XDG.
 # Requires an accessible X11 display; CI uses Xvfb and Mesa's software GL driver.
-APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-x11
+APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --smoke-test-x11
 # Read-only decode with the installed host feh; never changes the caller's wallpaper.
-APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-feh
+APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --smoke-test-feh
 # Requires existing feh, xprop and Xvfb. Starts and stops its own private X server.
 # Tests actual reviewed Kitty + wallpaper apply, undo and failing-child rollback.
-APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-wallpaper
+APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --smoke-test-wallpaper
 rm -rf build/smoke-tmp; unset TMPDIR
-sha256sum dist/DesktopTheming-x86_64.AppImage
+sha256sum dist/LinuxTheming-x86_64.AppImage
 ```
 
 FUSE is needed for normal mounting. AppImage extract-and-run is the fallback.
@@ -101,7 +101,7 @@ creation. They exclude interpreter startup and AppImage mount/extraction, and
 do not establish p95 behavior or compositor focus on a real desktop.
 
 ```sh
-APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --measure-startup --quick
+APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --measure-startup --quick
 ```
 
 Menu registration adds only `$XDG_DATA_HOME/applications/desktop-theming.desktop`,
@@ -122,7 +122,7 @@ published 0.1.0 assets remain unchanged.
 On x86_64 Arch/CachyOS, a temporary workaround for that original release is:
 
 ```sh
-LD_PRELOAD=/usr/lib/libstdc++.so.6 ./DesktopTheming-x86_64.AppImage
+LD_PRELOAD=/usr/lib/libstdc++.so.6 ./LinuxTheming-x86_64.AppImage
 ```
 
 This selects the installed system runtime for that invocation only. The path
@@ -165,7 +165,7 @@ To cut a release:
    (replace the version with the source version).
 3. Wait for the workflow to finish. Verify the public release tag resolves to
    the built source commit, download both assets, check the SHA-256 and run
-   `APPIMAGE_EXTRACT_AND_RUN=1 ./DesktopTheming-x86_64.AppImage --smoke-test`,
+   `APPIMAGE_EXTRACT_AND_RUN=1 ./LinuxTheming-x86_64.AppImage --smoke-test`,
    with `TMPDIR` set to a private directory that you remove afterwards.
    With an accessible X11 display, also run `--smoke-test-x11` on the downloaded
    asset to verify host graphics initialization.

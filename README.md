@@ -1,6 +1,6 @@
-# desktop-theming
+# Linux Theming
 
-<img src="desktop_theming/ui/icon.svg" width="96" height="96" alt="Desktop Theming: Tux with three theme color swatches">
+<img src="desktop_theming/ui/icon.svg" width="96" height="96" alt="Linux Theming: Tux with three theme color swatches">
 
 Icon: Tux by Larry Ewing (lewing@isc.tamu.edu), created with The GIMP;
 cropped and combined with theme colors. See [artwork attribution](packaging/THIRD_PARTY.md#icon-artwork).
@@ -9,7 +9,7 @@ A modular Linux desktop theming engine. It discovers an existing desktop,
 inspects appearance settings and prepares reversible theme changes while
 preserving unrelated preferences.
 
-![Desktop Theming showing the catana-verde-ascii wallpaper and its generated palette](docs/screenshots/appearance.png)
+![Linux Theming showing the catana-verde-ascii wallpaper and its generated palette](docs/screenshots/appearance.png)
 
 **Current state:** a local PySide6 / Qt Quick application over the Python engine.
 Choose a palette, inspect components and color sources, review exact changes,
@@ -24,7 +24,7 @@ MCP and a small fallback CLI for agents are planned later.
 
 ## Launch
 
-Open the built `dist/DesktopTheming-x86_64.AppImage`, or prepare a source checkout:
+Open the built `dist/LinuxTheming-x86_64.AppImage`, or prepare a source checkout:
 
 ```sh
 python3 -m venv .venv
@@ -51,7 +51,7 @@ Review and approve to change the wallpaper. The GUI runs without a server or
 background service. [GUI workflows](docs/GUI.md) and
 [AppImage builds, artifacts and compatibility](docs/APPIMAGE.md) describe usage
 and distribution. The AppImage workflow builds tested artifacts on GitHub Actions and publishes
-versioned [GitHub Releases](https://github.com/Arzuparreta/desktop-theming/releases)
+versioned [GitHub Releases](https://github.com/Arzuparreta/linux-theming/releases)
 on manual dispatch from `main`; see the [release procedure](docs/APPIMAGE.md#github-releases).
 
 The product direction is in [docs/DIRECTION.md](docs/DIRECTION.md).
