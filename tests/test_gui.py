@@ -51,6 +51,11 @@ class GuiTests(unittest.TestCase):
         self.which = patch("linux_theming.inventory.shutil.which", side_effect=lambda c: "/usr/bin/" + c)
         self.which.start()
         self.addCleanup(self.which.stop)
+        # GUI workflow tests use a synthetic inventory. Scanning the real /proc
+        # makes scheduling assertions depend on unrelated host processes.
+        self.processes = patch("linux_theming.inventory.processes", return_value=set())
+        self.processes.start()
+        self.addCleanup(self.processes.stop)
         self.messages = []
         self.old_handler = qInstallMessageHandler(lambda kind, context, text: self.messages.append(text))
         self.addCleanup(lambda: qInstallMessageHandler(self.old_handler))
