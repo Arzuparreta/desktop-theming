@@ -461,6 +461,14 @@ class LauncherTests(unittest.TestCase):
         state = launcher.status(self.paths)
         self.assertTrue(state["repair_needed"])
         self.assertIn("does not exist", state["executable_problem"])
+        self.assertEqual(state["commands"], {})
+        current = {"path": str(moved), "kind": "appimage", "problem": "", "extract_and_run": True}
+        before = self.tree()
+        with patch.object(launcher, "current_executable", return_value=current):
+            state = launcher.status(self.paths)
+        self.assertEqual(state["commands"], launcher.commands(str(moved), extract_and_run=True))
+        self.assertEqual(state["executable"], str(self.image))
+        self.assertEqual(self.tree(), before)
         reviewed = launcher.plan(self.paths, moved)
         self.assertEqual(reviewed["operation"], "update")
         self.assertEqual([item["role"] for item in reviewed["changes"]], ["launcher", "registration-record"])
@@ -470,6 +478,22 @@ class LauncherTests(unittest.TestCase):
         self.assertFalse(state["repair_needed"])
         values = entry_values(self.loc["launcher"].read_text())
         self.assertEqual(parse_exec(values[("Desktop Entry", "Exec")]), [str(moved)])
+
+    def test_running_another_copy_offers_its_command_and_flags_old_menu_target(self):
+        self.register()
+        current_image = self.appimage("Applications/LinuxTheming-x86_64.AppImage")
+        current = {"path": str(current_image), "kind": "appimage", "problem": ""}
+        before = self.loc["launcher"].read_bytes()
+        with patch.object(launcher, "current_executable", return_value=current):
+            state = launcher.status(self.paths)
+            self.assertTrue(state["repair_needed"])
+            self.assertFalse(state["current_matches"])
+            self.assertEqual(state["commands"], launcher.commands(str(current_image)))
+            self.assertEqual(self.loc["launcher"].read_bytes(), before)
+            reviewed = launcher.plan(self.paths)
+            self.assertEqual(reviewed["operation"], "update")
+            launcher.apply_reviewed(self.paths, reviewed)
+            self.assertFalse(launcher.status(self.paths)["repair_needed"])
 
     def test_changed_data_home_requires_removal_from_the_original_location(self):
         self.register()

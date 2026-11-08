@@ -573,13 +573,15 @@ ApplicationWindow {
                 visible: !!s.launcher.repair_needed
                 tone: "warning"
                 title: "The menu entry needs repair"
-                body: "Open this AppImage from its stable location and choose Update entry."
+                body: s.launcher.available
+                      ? "Choose Update entry to make the menu use this copy of Linux Theming. Update any keyboard shortcut in your desktop settings using the command below."
+                      : "Open this AppImage from its stable location and choose Update entry."
             }
             Command { visible: !!s.launcher.interrupted; text: "Recover interrupted menu change…"; onClicked: { accessDialog.close(); controller.recoverLauncher() } }
             Body { Layout.fillWidth: true; text: "Use this command for a keyboard shortcut. It opens Linux Theming ready to change the theme; opening it again brings the existing window forward where your desktop allows it." }
-            Code { Layout.fillWidth: true; Layout.preferredHeight: 64; text: s.launcher.command || "Open the AppImage from a stable location to register a menu entry." }
+            Code { objectName: "shortcutCommand"; Layout.fillWidth: true; Layout.preferredHeight: 64; text: s.launcher.command || "Open the AppImage from a stable location to register a menu entry." }
             RowLayout {
-                Command { text: "Copy command"; compact: true; enabled: !!s.launcher.command; onClicked: controller.copyText(s.launcher.command) }
+                Command { objectName: "copyShortcutCommand"; text: "Copy command"; compact: true; enabled: !!s.launcher.command; onClicked: controller.copyText(s.launcher.command) }
                 Item { Layout.fillWidth: true }
             }
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }

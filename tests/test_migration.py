@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from linux_theming import changes, integrations, inventory, launcher, migration, service
+from linux_theming import changes, integrations, inventory, launcher, migration, service, wallpaper
 from linux_theming.paths import APP_ID, LEGACY_ID, Paths
 from tests.legacy_fixture import restore, tree
 
@@ -85,6 +85,57 @@ class MigrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             migration.plan(self.paths)
         self.assertEqual(tree(self.root), before)
+
+    def test_feh_apply_after_migration_restores_wallpaper_from_legacy_history(self):
+        from PIL import Image
+
+        startup, current, candidate = [self.root / name for name in ('startup.png', 'current.png', 'next.png')]
+        for image in (startup, current, candidate):
+            Image.new('RGB', (8, 8), '#224466').save(image)
+        fehbg = 'feh --bg-fill -- ' + repr(str(startup)) + '\n'
+        (self.root / '.fehbg').write_text(fehbg)
+        root = ['_XROOTPMAP_ID(PIXMAP): pixmap id # 0x123']
+        setters = []
+
+        def which(name):
+            return '/fixture-tools/' + name
+
+        def command(args):
+            if args[0].endswith('xprop'):
+                return root[0]
+            self.assertTrue(args[0].endswith('feh'))
+            self.assertIn('--no-fehbg', args)
+            setters.append(args[-1])
+            root[0] += '1'
+            return ''
+
+        with (patch.dict(os.environ, XDG_SESSION_TYPE='x11', XDG_CURRENT_DESKTOP='i3'),
+              patch.object(wallpaper, 'command', side_effect=command)):
+            # Original journals without wallpaper actions must also be readable.
+            detected = wallpaper.detect(self.paths, current, which=which)
+            self.assertTrue(detected['available'], detected['reasons'])
+            previous = detected['action']
+            wallpaper.apply(previous)
+            legacy = self.paths.journal(changes.history(self.paths)[0]['id'])
+            journal = json.loads(legacy.read_text())
+            journal['wallpaper_action'] = previous
+            changes.write_journal(legacy, journal)
+            recorded = legacy.read_bytes()
+            migrated = migration.apply_reviewed(self.paths, migration.plan(self.paths))
+            profile = dict(service.load_profile(self.paths), wallpaper=str(candidate), set_wallpaper=True)
+            profile['components'].remove('swaybg')  # Use the session's feh adapter.
+            before = tree(self.root)
+            reviewed = service.make_plan(self.paths, profile, which=which)
+            self.assertEqual(tree(self.root), before)
+            self.assertEqual(setters, [str(current)])
+            self.assertEqual(reviewed['wallpaper_action']['prior_images'], [str(current)])
+            applied = service.apply_reviewed(self.paths, reviewed, which=which)
+            self.assertEqual(legacy.read_bytes(), recorded)
+            changes.undo(self.paths, applied['id'])
+            changes.undo(self.paths, migrated['id'])
+            changes.undo(self.paths, journal['id'])
+        self.assertEqual(setters, [str(current), str(candidate), str(current), str(startup)])
+        self.assertEqual((self.root / '.fehbg').read_text(), fehbg)
 
     def test_both_data_roots_and_unowned_destination_are_rejected(self):
         for path in (self.new.profile, self.paths.config / 'btop/themes/linux-theming.theme'):
@@ -190,18 +241,28 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(tree(self.root), before)
 
     def test_menu_upgrade_is_reviewed_and_does_not_duplicate_entry(self):
-        with patch.object(launcher, 'ephemeral_roots', return_value=[]):
+        record = launcher.read_record(self.paths)
+        image = self.root / 'Applications/LinuxTheming-x86_64.AppImage'
+        Path(record['executable']).rename(image)
+        current = {'path': str(image), 'kind': 'appimage', 'problem': ''}
+        with (patch.object(launcher, 'ephemeral_roots', return_value=[]),
+              patch.object(launcher, 'current_executable', return_value=current)):
             existing = launcher.status(self.paths)
             self.assertTrue(existing['registered'])
             self.assertTrue(existing['migration_needed'])
+            self.assertTrue(existing['repair_needed'])
+            self.assertIn('does not exist', existing['executable_problem'])
+            self.assertEqual(existing['commands'], launcher.commands(str(image)))
             before = tree(self.root)
-            plan = launcher.plan(self.paths, executable=existing['executable'])
+            plan = launcher.plan(self.paths)
             self.assertTrue(plan['applicable'], plan['problems'])
             self.assertEqual(tree(self.root), before)
             launcher.apply_reviewed(self.paths, plan)
             self.assertFalse((self.paths.data / 'applications/desktop-theming.desktop').exists())
             self.assertTrue((self.paths.data / 'applications/linux-theming.desktop').exists())
             self.assertFalse(launcher.status(self.paths)['migration_needed'])
+            self.assertFalse(launcher.status(self.paths)['repair_needed'])
+            self.assertEqual(launcher.read_record(self.paths)['executable'], str(image))
             launcher.apply_reviewed(self.paths, launcher.plan(self.paths, remove=True))
             self.assertFalse((self.paths.data / 'applications/linux-theming.desktop').exists())
             self.assertTrue(self.old.profile.exists())

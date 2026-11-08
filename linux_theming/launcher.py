@@ -863,7 +863,9 @@ def status(paths):
               "files": [], "repair_needed": False, "interrupted": None, "problem": "",
               "conflicts": [], "current": current, "current_matches": False,
               "supported": bool(current["path"]) and not current["problem"],
-              "commands": {}, "focus_note": FOCUS_NOTE}
+              "commands": commands(current["path"] if current["path"] and not current["problem"] else None,
+                                   extract_and_run=current.get("extract_and_run", False)),
+              "focus_note": FOCUS_NOTE}
     try:
         journal = read_journal(paths)
         if journal and journal["status"] in INTERRUPTED:
@@ -881,16 +883,17 @@ def status(paths):
             with contextlib.suppress(OSError):
                 if state_of(path)["kind"] != "missing":
                     result["conflicts"].append(str(path))
-        result["commands"] = commands(current["path"] if result["supported"] else None,
-                                      extract_and_run=current.get("extract_and_run", False))
         return result
     result.update(registered=True, executable=record["executable"],
-                  commands=commands(record["executable"], extract_and_run=record.get("extract_and_run", False)),
                   current_matches=current["path"] == record["executable"])
     try:
         identify(record["executable"])
     except ValueError as exc:
         result["executable_problem"] = str(exc)
+    else:
+        if not result["supported"]:
+            result["commands"] = commands(record["executable"],
+                                          extract_and_run=record.get("extract_and_run", False))
     root = Path(record["data_root"])
     for role, relative in recorded_files(record):
         path = root / relative
@@ -903,7 +906,8 @@ def status(paths):
         result["files"].append({"path": str(path), "role": role, "state": condition})
     result["migration_needed"] = str(loc["launcher"]) not in record["files"]
     result["repair_needed"] = result["migration_needed"] or bool(result["executable_problem"]) or any(
-        item["state"] == "missing" for item in result["files"])
+        item["state"] == "missing" for item in result["files"]) or (
+        result["supported"] and not result["current_matches"])
     return result
 
 
