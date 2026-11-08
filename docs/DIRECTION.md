@@ -1,6 +1,6 @@
 # Product direction
 
-desktop-theming is a modular control center for the Linux desktop. It helps
+Linux Theming is a modular control center for the Linux desktop. It helps
 people understand their existing setup and compose a coherent desktop using
 our wallpaper-derived, accessible color and theme system.
 

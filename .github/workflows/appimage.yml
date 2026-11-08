@@ -69,22 +69,22 @@ jobs:
         run: |
           test ! -e dist/desktop-theming/_internal/libstdc++.so.6
           APPIMAGE_EXTRACT_AND_RUN=1 LIBGL_ALWAYS_SOFTWARE=1 QT_DEBUG_PLUGINS=1 \
-            xvfb-run -a dist/DesktopTheming-x86_64.AppImage --smoke-test-x11 > "$RUNNER_TEMP/x11-smoke.log" 2>&1 \
+            xvfb-run -a dist/LinuxTheming-x86_64.AppImage --smoke-test-x11 > "$RUNNER_TEMP/x11-smoke.log" 2>&1 \
             || { cat "$RUNNER_TEMP/x11-smoke.log"; exit 1; }
           grep '^PASS:' "$RUNNER_TEMP/x11-smoke.log"
       - name: Exercise real wallpaper apply and undo on a private Xvfb
-        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test-wallpaper
+        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --smoke-test-wallpaper
       - name: Exercise bundled QML and engine in temporary HOME/XDG
         run: |
-          APPIMAGE_EXTRACT_AND_RUN=1 dist/DesktopTheming-x86_64.AppImage --smoke-test
+          APPIMAGE_EXTRACT_AND_RUN=1 dist/LinuxTheming-x86_64.AppImage --smoke-test
           cd dist
-          sha256sum DesktopTheming-x86_64.AppImage > DesktopTheming-x86_64.AppImage.sha256
+          sha256sum LinuxTheming-x86_64.AppImage > LinuxTheming-x86_64.AppImage.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: DesktopTheming-x86_64
+          name: LinuxTheming-x86_64
           path: |
-            dist/DesktopTheming-x86_64.AppImage
-            dist/DesktopTheming-x86_64.AppImage.sha256
+            dist/LinuxTheming-x86_64.AppImage
+            dist/LinuxTheming-x86_64.AppImage.sha256
 
   release:
     if: github.event_name == 'workflow_dispatch'
@@ -98,7 +98,7 @@ jobs:
           ref: ${{ needs.appimage.outputs.source_sha }}
       - uses: actions/download-artifact@v4
         with:
-          name: DesktopTheming-x86_64
+          name: LinuxTheming-x86_64
           path: dist
       - name: Verify and publish the tested AppImage
         env:
@@ -107,12 +107,12 @@ jobs:
           SOURCE_SHA: ${{ needs.appimage.outputs.source_sha }}
         run: |
           cd dist
-          sha256sum --check DesktopTheming-x86_64.AppImage.sha256
+          sha256sum --check LinuxTheming-x86_64.AppImage.sha256
           [[ "$(git ls-remote origin refs/heads/main | cut -f1)" == "$SOURCE_SHA" ]] || { echo 'main advanced during build; dispatch again'; exit 1; }
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-          Desktop Theming $RELEASE_VERSION, built and smoke-tested from main at $SOURCE_SHA.
+          Linux Theming $RELEASE_VERSION, built and smoke-tested from main at $SOURCE_SHA.
 
-          Download DesktopTheming-x86_64.AppImage and make it executable to launch.
+          Download LinuxTheming-x86_64.AppImage and make it executable to launch.
           Target: x86_64 Linux, glibc 2.35+ (Ubuntu 22.04 build base).
           FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
           The accompanying .sha256 file verifies the download.
@@ -142,6 +142,6 @@ jobs:
           preference tests simulate protocols; every real desktop is not verified.
           EOF
           gh release create "v$RELEASE_VERSION" \
-            --target "$SOURCE_SHA" --title "Desktop Theming $RELEASE_VERSION" \
+            --target "$SOURCE_SHA" --title "Linux Theming $RELEASE_VERSION" \
             --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes --latest \
-            DesktopTheming-x86_64.AppImage DesktopTheming-x86_64.AppImage.sha256
+            LinuxTheming-x86_64.AppImage LinuxTheming-x86_64.AppImage.sha256

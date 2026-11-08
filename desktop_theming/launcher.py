@@ -154,7 +154,7 @@ def current_executable(environ=None):
     if not getattr(sys, "frozen", False):
         return {"path": None, "kind": "source",
                 "problem": "This copy runs from a source checkout, which has no stable program "
-                           "file to add to the menu. Use the Desktop Theming AppImage, or choose a "
+                           "file to add to the menu. Use the Linux Theming AppImage, or choose a "
                            "launcher executable you maintain yourself."}
     image, appdir = env.get("APPIMAGE", ""), env.get("APPDIR", "")
     bundle = Path(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))).resolve()
@@ -209,12 +209,12 @@ def exec_line(argv):
 def desktop_entry(executable, icon, *, extract_and_run=False):
     prefix = [executable] + (["--appimage-extract-and-run"] if extract_and_run else [])
     return "\n".join([
-        "# Added to the application menu by Desktop Theming after review.",
-        "# Use Desktop Theming to repair or remove it; edits here are kept and stop that removal.",
+        "# Added to the application menu by Linux Theming after review.",
+        "# Use Linux Theming to repair or remove it; edits here are kept and stop that removal.",
         "[Desktop Entry]",
         "Type=Application",
         "Version=1.5",
-        "Name=Desktop Theming",
+        "Name=Linux Theming",
         "GenericName=Desktop theme control",
         "Comment=Compose and review reversible desktop colors",
         f"TryExec={escape_string(executable)}",
@@ -477,10 +477,10 @@ def _summary(result):
     operation, count = result["operation"], len(result["changes"])
     files = f"{count} file{'s' if count != 1 else ''}"
     executable = (result["executable"] or {}).get("path", "")
-    return {"register": f"Add Desktop Theming to the application menu, starting {executable}. "
+    return {"register": f"Add Linux Theming to the application menu, starting {executable}. "
                         f"Writes {files}.",
-            "update": f"Update the Desktop Theming menu entry to start {executable}. Writes {files}.",
-            "remove": f"Remove the Desktop Theming menu entry. Changes {files}.",
+            "update": f"Update the Linux Theming menu entry to start {executable}. Writes {files}.",
+            "remove": f"Remove the Linux Theming menu entry. Changes {files}.",
             "recover": f"Restore the files from the interrupted menu change. Changes {files}.",
             "unchanged": "The application menu entry is already up to date."}[operation]
 
@@ -529,9 +529,9 @@ def _register(paths, request, record, result, ephemeral):
             continue
         mine = owned.get(str(path))
         if before["kind"] != "missing" and not (mine and _same(before, mine)):
-            problems.append(f"{path} was changed after Desktop Theming added it. Your version is "
+            problems.append(f"{path} was changed after Linux Theming added it. Your version is "
                             "kept; restore it or remove it yourself, then review again." if mine else
-                            f"{path} already exists and was not created by Desktop Theming. It is "
+                            f"{path} already exists and was not created by Linux Theming. It is "
                             "kept unchanged; rename or remove it yourself, then review again.")
             continue
         if before.get("sha256") != after["sha256"] or before.get("mode") != after["mode"]:
@@ -559,11 +559,11 @@ def _register(paths, request, record, result, ephemeral):
         notes.append("Creates folders: " + ", ".join(str(item) for item in sorted(created))
                      + ". Removal keeps folders.")
     notes.append(f"The menu starts {identity['path']} where it is. Replacing that file keeps the entry "
-                 "working; moving or renaming it needs a repair from Desktop Theming.")
+                 "working; moving or renaming it needs a repair from Linux Theming.")
     if "link_target" in identity:
         notes.append(f"That path is a link to {identity['link_target']}; the menu keeps using the link.")
     if identity["kind"] != "appimage":
-        notes.append("This file is not an AppImage. Make sure it starts Desktop Theming.")
+        notes.append("This file is not an AppImage. Make sure it starts Linux Theming.")
     notes.append("No keyboard shortcut is assigned. To add one, use your desktop's shortcut settings "
                  f"with: {commands(identity['path'], extract_and_run=extracted)['quick']}")
     if extracted:
@@ -575,7 +575,7 @@ def _register(paths, request, record, result, ephemeral):
 def _remove(paths, record, result):
     problems = result["problems"]
     if record is None:
-        problems.append("Desktop Theming has not added an entry to the application menu.")
+        problems.append("Linux Theming has not added an entry to the application menu.")
         return
     root, planned = Path(record["data_root"]), []
     result["executable"] = {"path": record["executable"], "kind": "recorded"}
@@ -590,7 +590,7 @@ def _remove(paths, record, result):
         if before["kind"] == "missing":
             continue
         if not _same(before, record["files"][str(path)]):
-            problems.append(f"{path} was changed or replaced after Desktop Theming added it. It is "
+            problems.append(f"{path} was changed or replaced after Linux Theming added it. It is "
                             "kept; nothing was removed. Restore it or delete it yourself, then review "
                             "removal again.")
             continue
@@ -856,7 +856,7 @@ def exercise():
             request, ephemeral, label = _request({"executable": None, "remove": False,
                                                   "recover": False}), None, current["path"]
         else:
-            stub = root / "Apps with space/Desktop Theming %u.AppImage"
+            stub = root / "Apps with space/Linux Theming %u.AppImage"
             stub.parent.mkdir()
             stub.write_bytes(b"\x7fELF\x02\x01\x01\x00AI\x02" + b"\0" * 32)
             stub.chmod(0o755)

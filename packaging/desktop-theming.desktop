@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
 Version=1.5
-Name=Desktop Theming
-GenericName=Desktop theme control
+Name=Linux Theming
+GenericName=Linux desktop theme control
 Comment=Compose and review reversible desktop colors
 Exec=desktop-theming
 Icon=desktop-theming

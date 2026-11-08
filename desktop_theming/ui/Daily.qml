@@ -44,7 +44,7 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4
-                Label { text: s.hasApplied ? "Last applied by Desktop Theming" : "Make this desktop yours"; color: "#b9bbc4"; font.pixelSize: 12 }
+                Label { text: s.hasApplied ? "Last applied by Linux Theming" : "Make this desktop yours"; color: "#b9bbc4"; font.pixelSize: 12 }
                 Label {
                     objectName: "appliedTheme"
                     Layout.fillWidth: true

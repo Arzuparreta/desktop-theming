@@ -32,7 +32,7 @@ ApplicationWindow {
     minimumWidth: 760
     minimumHeight: 600
     visible: true
-    title: "Desktop Theming"
+    title: "Linux Theming"
     color: "#1b1d22"
     font.family: "sans-serif"
     font.pixelSize: 13
@@ -135,7 +135,7 @@ ApplicationWindow {
         spacing: dailyMode ? 12 : 20
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "Desktop Theming"; color: "#eeeeef"; font.pixelSize: 21; font.weight: Font.DemiBold }
+            Label { text: "Linux Theming"; color: "#eeeeef"; font.pixelSize: 21; font.weight: Font.DemiBold }
             Item { Layout.fillWidth: true }
             Body { text: sessionName(); font.pixelSize: 12 }
             Command { objectName: "dailyToggle"; text: dailyMode ? "Control center" : "Quick view"; quiet: true; enabled: !s.busy; onClicked: setDailyMode(!dailyMode) }
@@ -188,7 +188,7 @@ ApplicationWindow {
             objectName: "appliedReference"
             visible: !dailyMode
             Layout.fillWidth: true
-            text: s.hasApplied ? "Last applied by Desktop Theming: " + (s.applied.wallpaper || "Default palette") + " · " + s.applied.polarity + (s.pending ? " — Preview has unapplied changes" : "") : "No theme applied by Desktop Theming yet. Previewing only."
+            text: s.hasApplied ? "Last applied by Linux Theming: " + (s.applied.wallpaper || "Default palette") + " · " + s.applied.polarity + (s.pending ? " — Preview has unapplied changes" : "") : "No theme applied by Linux Theming yet. Previewing only."
             font.pixelSize: 12
         }
         StackLayout {
@@ -678,7 +678,7 @@ ApplicationWindow {
         background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
         contentItem: ColumnLayout {
             spacing: 12
-            Body { Layout.fillWidth: true; text: "The files were saved. Desktop Theming has not observed the appearance of these running applications. No application has been signalled or restarted." }
+            Body { Layout.fillWidth: true; text: "The files were saved. Linux Theming has not observed the appearance of these running applications. No application has been signalled or restarted." }
             ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -708,7 +708,7 @@ ApplicationWindow {
         anchors.centerIn: parent
         width: Math.min(680, window.width - 48)
         modal: true
-        title: "Open Desktop Theming your way"
+        title: "Open Linux Theming your way"
         background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
         contentItem: ColumnLayout {
             spacing: 16

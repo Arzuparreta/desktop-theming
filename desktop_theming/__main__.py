@@ -95,7 +95,7 @@ def main():
 
     QQuickStyle.setStyle("Basic")
     app = QGuiApplication(sys.argv)
-    app.setApplicationName("Desktop Theming")
+    app.setApplicationName("Linux Theming")
     app.setOrganizationName("desktop-theming")
     # Wayland app_id / desktop matching for the registered menu entry.
     app.setDesktopFileName("desktop-theming")

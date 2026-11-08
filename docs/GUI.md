@@ -6,11 +6,11 @@ preview. It runs as an ordinary user, locally, without a server or daemon.
 
 ## Run
 
-Use `dist/DesktopTheming-x86_64.AppImage` after building it, or download the
+Use `dist/LinuxTheming-x86_64.AppImage` after building it, or download the
 AppImage artifact from the AppImage GitHub Actions workflow. Make the extracted
 file executable and open it. No Python or Qt installation is needed on the target.
 The AppImage does not install a launcher or change desktop configuration on open.
-On systems without FUSE, use `./DesktopTheming-x86_64.AppImage --appimage-extract-and-run`.
+On systems without FUSE, use `./LinuxTheming-x86_64.AppImage --appimage-extract-and-run`.
 
 From a source checkout, explicitly prepare a development environment:
 
@@ -76,7 +76,7 @@ It does not signal, restart or reload applications.
 ## Application menu and shortcuts
 
 Open **Access…** from an AppImage stored in a permanent location, such as
-`~/Applications/DesktopTheming-x86_64.AppImage`. **Add to menu…** shows exact
+`~/Applications/LinuxTheming-x86_64.AppImage`. **Add to menu…** shows exact
 changes before approval: the per-user Desktop Entry, SVG icon and private
 restoration record. Nothing is registered just by opening an AppImage. Source
 launches do not offer registration because they have no stable program file.
