@@ -358,7 +358,7 @@ class LauncherTests(unittest.TestCase):
         self.loc["launcher"].write_text("user entry\n")
         result = launcher.plan(self.paths, self.image)
         self.assertFalse(result["applicable"])
-        self.assertIn("not created by Desktop Theming", result["problems"][0])
+        self.assertIn("not created by Linux Theming", result["problems"][0])
         self.assertEqual(result["changes"], [])
         with self.assertRaises(ValueError):
             launcher.apply_reviewed(self.paths, result)
