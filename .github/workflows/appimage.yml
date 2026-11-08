@@ -121,6 +121,18 @@ jobs:
           FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
           The accompanying .sha256 file verifies the download.
 
+          Redesigned interface: one window with Theme, Applications and History
+          pages. The Theme page previews the image with a sample bar and terminal
+          painted in the generated palette, in dark or light. A status bar shows the
+          preview, the applied theme and pending application or wallpaper changes.
+          First use has a three-step guide. Review shows decisions that need
+          attention first, lists your files before undo records and colors diffs.
+          The consent dialog names link targets and how many colors are replaced.
+          Applications use switches with status chips; History shows thumbnails,
+          what undo returns to and Preview again. Enter, arrow keys, Ctrl+1/2/3
+          and F1 speed up keyboard use. Previews never apply; every change is
+          still reviewed and approved explicitly.
+
           Existing Desktop Theming installations are read before any migration.
           Use Review migration… to inspect and approve the reversible data change,
           then ⋯ → Menu entry and shortcut… → Update entry… for an existing application-menu entry.
