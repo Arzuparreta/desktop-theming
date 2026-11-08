@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import changes, formats, integrations, inventory, presentation, service, theme
-from desktop_theming.paths import Paths
+from linux_theming import changes, formats, integrations, inventory, presentation, service, theme
+from linux_theming.paths import Paths
 
 EXAMPLES = {
     "konsole": "[Desktop Entry]\nDefaultProfile=Personal.profile\n",
@@ -187,7 +187,7 @@ class IntegrationTests(unittest.TestCase):
                 config.write_text(edit(themed))
                 self.assertTrue(inventory.managed(self.paths, component))
                 plan = self.plan(dict(profile, polarity="light"))
-                self.assertTrue(any("outside desktop-theming" in w for w in plan["warnings"]))
+                self.assertTrue(any("outside linux-theming" in w for w in plan["warnings"]))
                 update = service.apply_reviewed(self.paths, plan, which=self.which)
                 self.assertNotEqual(config.read_text(), edit(themed))
                 self.assertEqual(config.read_text().count(marker), 1)
@@ -226,13 +226,13 @@ class IntegrationTests(unittest.TestCase):
                 self.assertNotEqual(edited, config.read_text())
                 config.write_text(edited)
                 for target in (dict(profile, polarity="light"), self.profile):
-                    with self.assertRaisesRegex(changes.Conflict, "changed outside desktop-theming"):
+                    with self.assertRaisesRegex(changes.Conflict, "changed outside linux-theming"):
                         self.plan(target)
-                with self.assertRaisesRegex(changes.Conflict, "changed outside desktop-theming"):
+                with self.assertRaisesRegex(changes.Conflict, "changed outside linux-theming"):
                     changes.review_undo(self.paths, result["id"])
                 self.assertEqual(config.read_text(), edited)
                 self.assertFalse(inventory.managed(self.paths, component))
-                with patch("desktop_theming.inventory.shutil.which", side_effect=self.which):
+                with patch("linux_theming.inventory.shutil.which", side_effect=self.which):
                     info = presentation.connection(self.paths, component)
                 self.assertTrue(info["blocked"])
                 self.assertIn("changed outside", info["explanation"])
@@ -262,7 +262,7 @@ class IntegrationTests(unittest.TestCase):
                                f"icon_theme=breeze\nstyle=Fusion\n\n[SettingsWindow]\ngeometry={new}\n")
                 saved = {path: path.read_text() for path in (qt5, qt6)}
                 self.assertTrue(inventory.managed(self.paths, "qt"))
-                with patch("desktop_theming.inventory.shutil.which", side_effect=self.which):
+                with patch("linux_theming.inventory.shutil.which", side_effect=self.which):
                     self.assertFalse(presentation.connection(self.paths, "qt")["blocked"])
                 plan = self.plan(dict(profile, polarity="light"))
                 self.assertNotIn(str(qt5), [item["path"] for item in plan["changes"]])
@@ -363,7 +363,7 @@ class IntegrationTests(unittest.TestCase):
                 raise OSError("injected write failure")
             original_restore(path, value)
 
-        with patch("desktop_theming.changes.atomic_restore", side_effect=fail_once), self.assertRaises(OSError):
+        with patch("linux_theming.changes.atomic_restore", side_effect=fail_once), self.assertRaises(OSError):
             self.apply(self.profile_for(["foot", "mako"]))
         self.assertEqual({path: changes.snapshot(path) for path in before}, before)
         self.assertEqual(changes.history(self.paths)[0]["status"], "rolled-back")
@@ -384,7 +384,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertFalse(self.paths.ownership("mako").exists())
 
     def test_gtk_unknown_library_availability_can_be_selected(self):
-        with patch("desktop_theming.inventory.shutil.which", return_value=None):
+        with patch("linux_theming.inventory.shutil.which", return_value=None):
             info = presentation.connection(self.paths, "gtk3")
         self.assertFalse(info["blocked"])
         self.apply(self.profile_for(["gtk3"]))

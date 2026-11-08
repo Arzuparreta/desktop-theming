@@ -9,8 +9,8 @@ from pathlib import Path
 
 from . import changes
 
-START = "# BEGIN desktop-theming"
-END = "# END desktop-theming"
+START = "# BEGIN linux-theming"
+END = "# END linux-theming"
 KITTY_COLORS = {
     "background", "foreground", "cursor", "cursor_text_color", "selection_background",
     "selection_foreground", "url_color", "active_border_color", "inactive_border_color",
@@ -27,13 +27,25 @@ GHOSTTY_COLORS = {
 
 
 def split_block(text):
+    legacy_start, legacy_end = START.replace("linux-theming", "desktop-theming"), END.replace("linux-theming", "desktop-theming")
+    old = legacy_start in text or legacy_end in text
+    if old and (START in text or END in text):
+        raise ValueError("Both old and new managed blocks exist; resolve the conflict first.")
+    return _split_block(text, legacy_start, legacy_end) if old else _split_block(text, START, END)
+
+
+def has_block(text):
+    return any(marker in text for marker in (START, END, "# BEGIN desktop-theming", "# END desktop-theming"))
+
+
+def _split_block(text, START, END):
     if START not in text and END not in text:
         return text, ""
     pattern = re.compile(r"(?m)^" + re.escape(START) + r"\n.*?^" + re.escape(END) + r"\n?",
                          re.DOTALL)
     matches = list(pattern.finditer(text))
     if text.count(START) != 1 or text.count(END) != 1 or len(matches) != 1:
-        raise ValueError("Malformed desktop-theming block in configuration.")
+        raise ValueError("Malformed linux-theming block in configuration.")
     match = matches[0]
     return text[:match.start()] + text[match.end():], match.group()
 

@@ -2,9 +2,9 @@
 
 Only three files are ever written, each at a fixed path:
 
-- ``$XDG_DATA_HOME/applications/desktop-theming.desktop``
-- ``$XDG_DATA_HOME/icons/hicolor/scalable/apps/desktop-theming.svg``
-- ``$XDG_STATE_HOME/desktop-theming/launcher/registration.json`` (ownership record)
+- ``$XDG_DATA_HOME/applications/linux-theming.desktop``
+- ``$XDG_DATA_HOME/icons/hicolor/scalable/apps/linux-theming.svg``
+- ``$XDG_STATE_HOME/linux-theming/launcher/registration.json`` (ownership record)
 
 plus this module's own journal and lock beside the record. Registration never
 touches the theme profile or change history, runs no commands and signals no
@@ -29,11 +29,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import changes
+from .paths import LEGACY_ID
 
 FORMAT = 1
-APP_ID = "desktop-theming"
+APP_ID = "linux-theming"
 LAUNCHER = Path("applications") / f"{APP_ID}.desktop"
 ICON = Path("icons/hicolor/scalable/apps") / f"{APP_ID}.svg"
+LEGACY_LAUNCHER = Path("applications") / f"{LEGACY_ID}.desktop"
+LEGACY_ICON = Path("icons/hicolor/scalable/apps") / f"{LEGACY_ID}.svg"
 SOURCE_ICON = Path(__file__).parent / "ui/icon.svg"
 MAX_BYTES = 256 * 1024  # Bound on backups kept for restoration and on files read.
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -58,7 +61,7 @@ def data_root(paths, environ=None):
 
 
 def state_directory(paths):
-    return paths.state / "desktop-theming/launcher"
+    return paths.state / "linux-theming/launcher"
 
 
 def locations(paths, environ=None, root=None):
@@ -277,7 +280,8 @@ def file_state(data, mode):
 
 
 def _same(current, recorded):
-    return current.get("kind") == "file" and current.get("sha256") == recorded.get("sha256")
+    return (current.get("kind") == "file" and current.get("sha256") == recorded.get("sha256")
+            and current.get("mode") == recorded.get("mode"))
 
 
 def _text(state):
@@ -338,9 +342,24 @@ def _valid_state(value):
     return value["kind"] != "symlink" or isinstance(value.get("target"), str)
 
 
+def record_path(paths):
+    modern = locations(paths)["record"]
+    legacy = paths.state / LEGACY_ID / "launcher/registration.json"
+    found = [p for p in (modern, legacy) if p.exists() or p.is_symlink()]
+    if len(found) > 1:
+        raise ValueError("Both old and new menu registration records exist. Preserve both and resolve the conflict.")
+    return found[0] if found else modern
+
+
+def recorded_files(record):
+    root = Path(record["data_root"])
+    old = str(root / LEGACY_LAUNCHER) in record["files"]
+    return (("launcher", LEGACY_LAUNCHER), ("icon", LEGACY_ICON)) if old else (("launcher", LAUNCHER), ("icon", ICON))
+
+
 def read_record(paths):
     loc = locations(paths)
-    record = _read_json(loc["record"], "registration record")
+    record = _read_json(record_path(paths), "registration record")
     if record is None:
         return None
     try:
@@ -349,7 +368,8 @@ def read_record(paths):
         valid = (record["format"] == FORMAT and isinstance(record["executable"], str)
                  and root.is_absolute() and isinstance(files, dict)
                  and isinstance(record.get("extract_and_run", False), bool)
-                 and set(files) == {str(root / LAUNCHER), str(root / ICON)}
+                 and set(files) in ({str(root / LAUNCHER), str(root / ICON)},
+                                   {str(root / LEGACY_LAUNCHER), str(root / LEGACY_ICON)})
                  and all(isinstance(item.get("sha256"), str) for item in files.values()))
     except (KeyError, TypeError, AttributeError):
         valid = False
@@ -362,6 +382,13 @@ def read_record(paths):
 def read_journal(paths):
     loc = locations(paths)
     journal = _read_json(loc["journal"], "registration journal")
+    legacy = _read_json(paths.state / LEGACY_ID / "launcher/journal.json", "old registration journal")
+    if legacy and legacy.get("status") in INTERRUPTED:
+        if journal and journal.get("status") in INTERRUPTED:
+            raise ValueError("Both menu journals need recovery; preserve both and resolve the conflict.")
+        journal = legacy
+    elif journal is None:
+        journal = legacy
     if journal is None:
         return None
     try:
@@ -383,12 +410,12 @@ def _allowed(paths, path, record=None, journal=None):
     roots = {(loc["root"], loc["launcher"]), (loc["root"], loc["icon"])}
     if record:
         old = Path(record["data_root"])
-        roots |= {(old, old / LAUNCHER), (old, old / ICON)}
+        roots |= {(old, old / relative) for _, relative in recorded_files(record)}
     for item in (journal or {}).get("changes", []):
         root = Path(item.get("root", ""))
-        if root.is_absolute() and Path(item["path"]) in (root / LAUNCHER, root / ICON):
+        if root.is_absolute() and Path(item["path"]) in (root / LAUNCHER, root / ICON, root / LEGACY_LAUNCHER, root / LEGACY_ICON):
             roots.add((root, Path(item["path"])))
-    if path == loc["record"]:
+    if path in (loc["record"], paths.state / LEGACY_ID / "launcher/registration.json"):
         return paths.state
     for root, allowed in roots:
         if path == allowed:
@@ -432,6 +459,10 @@ def _build(paths, request, ephemeral=None):
     problems, notes = result["problems"], result["notes"]
     try:
         journal = read_journal(paths)
+        if request["recover"] and journal and journal["status"] in INTERRUPTED:
+            result["operation"] = "recover"
+            _recover(paths, journal, None, result)
+            return _finish(result)
         record = read_record(paths)
     except ValueError as exc:
         problems.append(str(exc))
@@ -487,6 +518,15 @@ def _summary(result):
 
 def _register(paths, request, record, result, ephemeral):
     loc, problems, notes = locations(paths), result["problems"], result["notes"]
+    legacy_owned = record and str(loc["root"] / LEGACY_LAUNCHER) in record["files"]
+    if not legacy_owned:
+        for relative in (LEGACY_LAUNCHER, LEGACY_ICON):
+            path = loc["root"] / relative
+            if path.exists() or path.is_symlink():
+                problems.append(f"{path} already exists without a matching old registration record. "
+                                "It is preserved; resolve it before adding another menu entry.")
+        if problems:
+            return
     explicit = request["executable"]
     extracted = False
     if explicit is None:
@@ -536,6 +576,21 @@ def _register(paths, request, record, result, ephemeral):
             continue
         if before.get("sha256") != after["sha256"] or before.get("mode") != after["mode"]:
             planned.append(_change(path, role, loc["root"], before, after))
+    if record and str(loc["launcher"]) not in record["files"]:
+        # A reviewed upgrade replaces the old owned entry rather than creating
+        # a second menu entry. Modified old files abort the entire transaction.
+        for role, relative in recorded_files(record):
+            path = Path(record["data_root"]) / relative
+            changes.safe_parents(path, loc["root"])
+            before = state_of(path)
+            if before["kind"] != "missing" and not _same(before, record["files"][str(path)]):
+                problems.append(f"{path} changed after registration. Resolve it before migrating the menu.")
+            elif before["kind"] != "missing":
+                planned.append(_change(path, role, loc["root"], before, {"kind": "missing"}))
+        old_record = record_path(paths)
+        if old_record != loc["record"]:
+            planned.append(_change(old_record, "registration-record", paths.state,
+                                   state_of(old_record), {"kind": "missing"}))
     if problems:
         return
     record_after = {"format": FORMAT, "executable": identity["path"], "data_root": str(loc["root"]),
@@ -579,7 +634,7 @@ def _remove(paths, record, result):
         return
     root, planned = Path(record["data_root"]), []
     result["executable"] = {"path": record["executable"], "kind": "recorded"}
-    for role, relative in (("launcher", LAUNCHER), ("icon", ICON)):
+    for role, relative in recorded_files(record):
         path = root / relative
         try:
             changes.safe_parents(path, root)
@@ -597,8 +652,8 @@ def _remove(paths, record, result):
         planned.append(_change(path, role, root, before, {"kind": "missing"}))
     if problems:
         return
-    record_before = state_of(locations(paths)["record"])
-    planned.append(_change(locations(paths)["record"], "registration-record", paths.state,
+    record_before = state_of(record_path(paths))
+    planned.append(_change(record_path(paths), "registration-record", paths.state,
                            record_before, {"kind": "missing"}))
     result["changes"] = planned
     result["notes"].append("Removal keeps folders and leaves the program file itself untouched.")
@@ -656,12 +711,15 @@ def _private_directory(paths):
 def locked(paths):
     """Serialize registration; independent of theme transactions, which use their own lock."""
     _private_directory(paths)
-    fd = os.open(locations(paths)["lock"], os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    old = paths.state / LEGACY_ID / "launcher/registration.lock"
+    locks = ([old] if old.parent.exists() else []) + [locations(paths)["lock"]]
+    with contextlib.ExitStack() as stack:
+        for path in locks:
+            changes.safe_parents(path, paths.state)
+            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            stack.callback(os.close, fd)
+            fcntl.flock(fd, fcntl.LOCK_EX)
         yield
-    finally:
-        os.close(fd)
 
 
 def _fsync_directory(path):
@@ -691,7 +749,7 @@ def _write(paths, path, state, record=None, journal=None):
         raise ValueError(f"The recorded content for {path} is damaged; nothing was written.")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700 if root == paths.state else 0o755)
     changes.safe_parents(path, root)  # Recheck: a directory could have been replaced meanwhile.
-    fd, temporary = tempfile.mkstemp(prefix=".desktop-theming-", dir=path.parent)
+    fd, temporary = tempfile.mkstemp(prefix=".linux-theming-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(data)
@@ -705,9 +763,10 @@ def _write(paths, path, state, record=None, journal=None):
     _fsync_directory(path.parent)
 
 
-def _write_journal(paths, journal):
+def _write_journal(paths, journal, *, legacy=False):
     data = (json.dumps(journal, indent=2, sort_keys=True) + "\n").encode()
-    path = locations(paths)["journal"]
+    path = paths.state / LEGACY_ID / "launcher/journal.json" if legacy else locations(paths)["journal"]
+    changes.safe_parents(path, paths.state)
     fd, temporary = tempfile.mkstemp(prefix=".journal-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as stream:
@@ -778,15 +837,18 @@ def _apply(paths, reviewed, ephemeral):
 
 
 def _apply_recovery(paths, reviewed):
-    journal, record = read_journal(paths), read_record(paths)
+    journal, record = read_journal(paths), None
+    legacy_path = paths.state / LEGACY_ID / "launcher/journal.json"
+    old = _read_json(legacy_path, "old registration journal")
+    legacy = old is not None and old.get("id") == journal.get("id") and old.get("status") in INTERRUPTED
     journal["status"] = "recovery-needed"
-    _write_journal(paths, journal)
+    _write_journal(paths, journal, legacy=legacy)
     for item in reviewed["changes"]:
         if not _equal(state_of(item["path"]), item["before"]):
             raise ValueError(f"{item['path']} changed during recovery. Review recovery again.")
         _write(paths, item["path"], item["after"], record, journal)
     journal["status"] = "recovered"
-    _write_journal(paths, journal)
+    _write_journal(paths, journal, legacy=legacy)
     return {"status": "recovered", "operation": "recover", "id": journal.get("id")}
 
 
@@ -804,6 +866,9 @@ def status(paths):
               "commands": {}, "focus_note": FOCUS_NOTE}
     try:
         journal = read_journal(paths)
+        if journal and journal["status"] in INTERRUPTED:
+            result["interrupted"] = {"operation": journal["operation"], "status": journal["status"],
+                                     "created": journal.get("created", "")}
         record = read_record(paths)
     except ValueError as exc:
         result["problem"] = str(exc)
@@ -812,7 +877,7 @@ def status(paths):
         result["interrupted"] = {"operation": journal["operation"], "status": journal["status"],
                                  "created": journal.get("created", "")}
     if record is None:
-        for path in (loc["launcher"], loc["icon"]):
+        for path in (loc["launcher"], loc["icon"], loc["root"] / LEGACY_LAUNCHER, loc["root"] / LEGACY_ICON):
             with contextlib.suppress(OSError):
                 if state_of(path)["kind"] != "missing":
                     result["conflicts"].append(str(path))
@@ -827,7 +892,7 @@ def status(paths):
     except ValueError as exc:
         result["executable_problem"] = str(exc)
     root = Path(record["data_root"])
-    for role, relative in (("launcher", LAUNCHER), ("icon", ICON)):
+    for role, relative in recorded_files(record):
         path = root / relative
         try:
             current_state = state_of(path)
@@ -836,7 +901,8 @@ def status(paths):
         condition = ("missing" if current_state["kind"] == "missing" else
                      "unchanged" if _same(current_state, record["files"][str(path)]) else "modified")
         result["files"].append({"path": str(path), "role": role, "state": condition})
-    result["repair_needed"] = bool(result["executable_problem"]) or any(
+    result["migration_needed"] = str(loc["launcher"]) not in record["files"]
+    result["repair_needed"] = result["migration_needed"] or bool(result["executable_problem"]) or any(
         item["state"] == "missing" for item in result["files"])
     return result
 
@@ -847,10 +913,10 @@ def exercise():
     """Register, verify and remove in a throwaway HOME/XDG; returns a PASS line."""
     from types import SimpleNamespace
 
-    with tempfile.TemporaryDirectory(prefix="desktop-theming-launcher-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="linux-theming-launcher-") as temporary:
         root = Path(temporary)
         paths = SimpleNamespace(home=root, config=root / "config", state=root / "state",
-                                data=root / "data", profile=root / "config/desktop-theming/profile.json")
+                                data=root / "data", profile=root / "config/linux-theming/profile.json")
         current = current_executable()
         if current["path"] and not current["problem"]:
             request, ephemeral, label = _request({"executable": None, "remove": False,

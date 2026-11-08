@@ -8,7 +8,18 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 
-from . import appearance, changes, inventory, library, navigation, presentation, service, theme, wallpaper
+from . import (
+    appearance,
+    changes,
+    inventory,
+    library,
+    migration,
+    navigation,
+    presentation,
+    service,
+    theme,
+    wallpaper,
+)
 from .paths import Paths
 
 
@@ -58,7 +69,7 @@ class Controller(QObject):
                        "scanning": False, "folderLoading": False, "error": "", "notice": "",
                        "applied": copy.deepcopy(service.DEFAULT_PROFILE), "pending": False,
                        "hasApplied": self.paths.profile.exists(), "activation": [],
-                       "launcher": {}, "shortcut": "",
+                       "launcher": {}, "shortcut": "", "migration": migration.status(self.paths),
                        "overview": {"components": [], "history": [], "session": {"desktop": "Unknown", "type": "unknown"}},
                        "profile": dict(copy.deepcopy(service.DEFAULT_PROFILE), set_wallpaper=True), "palette": {},
                        "review": {}, "exportText": "", "exportComponent": "", "wallpaperUrl": "", "connection": {}, "problem": {}, "activity": ""}
@@ -144,6 +155,9 @@ class Controller(QObject):
         return not (self._state["busy"] or self._state["previewing"] or self._reads or self.timer.isActive())
 
     def problem(self, context, detail):
+        if "migration" in detail.lower():
+            return {"title": "Data migration needs attention", "body": detail,
+                    "action": "access", "label": "Open access options"}
         if context == "launcher":
             return {"title": "Application menu needs attention", "body": detail,
                     "action": "access", "label": "Open access options"}
@@ -485,13 +499,15 @@ class Controller(QObject):
             files.extend(appearance.describe(action, reverse=True) for action in plan.get("settings_actions", []))
             summary = ["Restore the previous configuration shown below. Later edits are preserved."]
             item = next((entry for entry in self._state["overview"]["history"] if entry["id"] == ident), {})
+            if item.get("migration"):
+                summary.append("Restore the old application data and references, keeping the latest image browsing choices.")
             for label, key in (("Change", "theme"), ("Restore", "previous_theme")):
                 value = item.get(key)
                 if value:
                     summary.append(label + ": " + (Path(value["wallpaper"]).name if value["wallpaper"] else "Default palette") + " · " + value["polarity"])
                 elif key == "previous_theme" and item.get("theme"):
-                    summary.append("Restore the configuration from before Desktop Theming managed this profile.")
-            self.publish(review={"kind": "undo", "title": "Recover changes" if recover else "Undo changes",
+                    summary.append("Restore the configuration from before Linux Theming managed this profile.")
+            self.publish(review={"kind": "undo", "title": "Recover changes" if recover else "Undo data migration" if item.get("migration") else "Undo changes",
                                  "changes": files,
                                  "summary": summary,
                                  "warnings": []})
@@ -511,12 +527,14 @@ class Controller(QObject):
             return
         kind, plan = self._review
         self._review = None  # Approval is consumed once, including on conflict.
-        if kind in ("apply", "undo"):
+        if kind in ("apply", "undo", "migration"):
             self._write_epoch += 1
 
         def operation():
             if kind == "apply":
                 result = service.apply_reviewed(self.paths, plan)
+            elif kind == "migration":
+                result = migration.apply_reviewed(self.paths, plan)
             elif kind == "launcher":
                 from . import launcher
 
@@ -535,13 +553,27 @@ class Controller(QObject):
                 return
             self.invalidate_preview()
             self.publish(overview=overview, profile=copy.deepcopy(overview["profile"]),
+                         migration=migration.status(self.paths),
                          applied=copy.deepcopy(overview["profile"]), hasApplied=self.paths.profile.exists(),
                          review={}, palette={}, exportText="", activation=presentation.activation_guidance(overview["profile"]),
-                         notice=("Changes applied. Reopen applications or use their reload actions where needed."
+                         notice=("Data migrated. Your palette is preserved. Update an existing menu entry from Access options."
+                                 if kind == "migration" else "Changes applied. Reopen applications or use their reload actions where needed."
                                  if result["status"] == "applied" else "Previous configuration restored."))
             # Keep the completion notice while regenerating the preview.
             self.timer.start()
         self.start(operation, complete, context="apply" if kind == "apply" else "launcher" if kind == "launcher" else "restore")
+
+    @Slot()
+    def reviewMigration(self):
+        def complete(plan):
+            self._review = ("migration", plan)
+            self.publish(review={"kind": "migration", "title": "Migrate Desktop Theming data",
+                                 "changes": [dict(item, label=presentation.describe_file(self.paths, item))
+                                             for item in plan["changes"]],
+                                 "summary": ["Move the current profile and managed references to Linux Theming.",
+                                             "Keep the same theme. This migration can be undone from change history."],
+                                 "warnings": plan["warnings"]})
+        self.start(lambda: migration.plan(self.paths), complete, context="restore")
 
     @Slot(str)
     def renderExport(self, component):

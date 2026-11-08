@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def isolated_environment(*, x11=False):
-    temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-smoke-")
+    temporary = tempfile.TemporaryDirectory(prefix="linux-theming-smoke-")
     root = Path(temporary.name)
     binaries = root / "bin"
     binaries.mkdir()
@@ -132,7 +132,7 @@ def exercise(app, engine, controller):
                     raise ValueError("Folder image preview failed")
                 if controller.paths.profile.exists() or controller.paths.state.exists():
                     raise ValueError("Image selection wrote profile or transaction data")
-                if not (controller.paths.config / "desktop-theming/navigation.ini").exists():
+                if not (controller.paths.config / "linux-theming/navigation.ini").exists():
                     raise ValueError("Navigation settings were not saved")
                 controller.setWallpaperEnabled(False)
             elif step == 5:
@@ -182,6 +182,9 @@ def exercise(app, engine, controller):
                 if not engine.rootObjects():
                     raise ValueError("QML window is missing")
                 exercise_integrations(controller.paths)
+                from . import migration
+
+                print(migration.exercise())
                 print("PASS: QML, image/folder dialogs, thumbnails, guided connection, quick view, search/random, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
                 timer.stop()
                 app.exit(0)

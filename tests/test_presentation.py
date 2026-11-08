@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import presentation, service
-from desktop_theming.paths import Paths
+from linux_theming import presentation, service
+from linux_theming.paths import Paths
 
 
 class PresentationTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class PresentationTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         self.paths = Paths(root, root / "config", root / "state")
-        self.which = patch("desktop_theming.inventory.shutil.which", return_value="/usr/bin/kitty")
+        self.which = patch("linux_theming.inventory.shutil.which", return_value="/usr/bin/kitty")
         self.which.start()
         self.addCleanup(self.which.stop)
 
@@ -89,7 +89,7 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual(presentation.problem("apply", "The reviewed plan is stale")["action"], "review")
         self.assertEqual(presentation.problem("restore", "The reviewed restoration is stale")["action"], "history")
         conflict = ("The reviewed plan is stale: /x/qt5ct.conf: the setting color_scheme_path in "
-                    "[Appearance] was changed outside desktop-theming after it was applied.")
+                    "[Appearance] was changed outside linux-theming after it was applied.")
         for context in ("apply", "restore", "review"):
             problem = presentation.problem(context, conflict)
             self.assertEqual(problem["title"], "Theme settings were changed outside the app")

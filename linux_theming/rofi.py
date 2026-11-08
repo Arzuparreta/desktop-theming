@@ -13,8 +13,8 @@ from pathlib import Path
 
 from . import formats
 
-START = '/* BEGIN desktop-theming Rofi colors */'
-END = '/* END desktop-theming Rofi colors */'
+START = '/* BEGIN linux-theming Rofi colors */'
+END = '/* END linux-theming Rofi colors */'
 COLOR_KEYS = {'background-color', 'text-color', 'border-color', 'handle-color', 'separator-color'}
 STYLES = {'bold', 'italic', 'underline', 'strikethrough', 'none', 'uppercase', 'lowercase', 'capitalize'}
 TOKEN = re.compile(r'/\*.*?\*/|//[^\r\n]*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\$\{[A-Za-z_]\w*\}|[{}:;]|[^\s{}:;"\']+', re.S)
@@ -289,7 +289,8 @@ def render(c, rules=()):
 
 
 def transform(paths, path, text, c):
-    if START in text or END in text:
+    if any(marker in text for marker in (START, END, '/* BEGIN desktop-theming Rofi colors */',
+                                        '/* END desktop-theming Rofi colors */')):
         raise ValueError('Unowned Rofi palette block; restore its ownership record or resolve it before connecting.')
     report = inspect(paths, path, text)
     return formats.append(text, render(c, report['rules']))

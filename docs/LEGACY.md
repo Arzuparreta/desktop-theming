@@ -83,8 +83,8 @@ plus pywal's usual `~/.cache/wal/*`.
 ## Install
 
 ```sh
-git clone git@github.com:Arzuparreta/desktop-theming.git
-cd desktop-theming && ./install.sh --thinkpad --apply
+git clone git@github.com:Arzuparreta/linux-theming.git
+cd linux-theming && ./install.sh --thinkpad --apply
 ```
 
 `install.sh --thinkpad --apply` symlinks everything into `$HOME` (existing files are moved to

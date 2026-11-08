@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (must match desktop_theming.__version__, e.g. 0.4.0)'
+        description: 'Release version (must match linux_theming.__version__, e.g. 0.4.0)'
         required: true
         type: string
 
@@ -33,7 +33,7 @@ jobs:
           if [[ "$IS_RELEASE" == true ]]; then
             [[ "$GITHUB_REF" == refs/heads/main ]] || { echo 'Release must run on main'; exit 1; }
             [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable X.Y.Z version'; exit 1; }
-            [[ "$RELEASE_VERSION" == "$(python3 -c 'from desktop_theming import __version__; print(__version__)')" ]] || { echo 'Version does not match source'; exit 1; }
+            [[ "$RELEASE_VERSION" == "$(python3 -c 'from linux_theming import __version__; print(__version__)')" ]] || { echo 'Version does not match source'; exit 1; }
             [[ "$(git ls-remote origin refs/heads/main | cut -f1)" == "$(git rev-parse HEAD)" ]] || { echo 'main advanced; dispatch again'; exit 1; }
             [[ -z "$(git ls-remote origin "refs/tags/v$RELEASE_VERSION")" ]] || { echo 'Tag already exists; bump the source version'; exit 1; }
           fi
@@ -54,7 +54,7 @@ jobs:
       - name: Test GUI and engine offscreen
         run: |
           .venv/bin/python -m unittest discover -s tests -v
-          .venv/bin/ruff check desktop_theming tests
+          .venv/bin/ruff check linux_theming tests
           bash -n install.sh scripts/build-appimage.sh
       - name: Fetch pinned appimagetool
         run: |
@@ -71,7 +71,7 @@ jobs:
         run: APPIMAGETOOL="$RUNNER_TEMP/appimagetool" APPIMAGE_RUNTIME="$RUNNER_TEMP/appimage-runtime" scripts/build-appimage.sh
       - name: Check host graphics runtime compatibility
         run: |
-          test ! -e dist/desktop-theming/_internal/libstdc++.so.6
+          test ! -e dist/linux-theming/_internal/libstdc++.so.6
           APPIMAGE_EXTRACT_AND_RUN=1 LIBGL_ALWAYS_SOFTWARE=1 QT_DEBUG_PLUGINS=1 \
             xvfb-run -a dist/LinuxTheming-x86_64.AppImage --smoke-test-x11 > "$RUNNER_TEMP/x11-smoke.log" 2>&1 \
             || { cat "$RUNNER_TEMP/x11-smoke.log"; exit 1; }
@@ -120,6 +120,12 @@ jobs:
           Target: x86_64 Linux, glibc 2.35+ (Ubuntu 22.04 build base).
           FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
           The accompanying .sha256 file verifies the download.
+
+          Existing Desktop Theming installations are read before any migration.
+          Use Review migration… to inspect and approve the reversible data change,
+          then Access… → Update entry… for an existing application-menu entry.
+          Keep the old state directory: it retains the original undo history.
+          See docs/MIGRATION.md for recovery and compatibility details.
 
           Managed integrations now cover Alacritty, foot, i3, Sway, Hyprland,
           KDE application colors, Polybar, Waybar, Rofi, Wofi, Dunst, Mako,

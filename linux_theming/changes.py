@@ -90,12 +90,32 @@ def replacement(path, after, config_root, *, before=None):
                 fromfile=f"{path} (current)", tofile=f"{path} (proposed)"))}
 
 
+def sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def private_parents(directory):
+    missing = []
+    parent = directory
+    while not parent.exists():
+        missing.append(parent)
+        parent = parent.parent
+    for parent in reversed(missing):
+        parent.mkdir(mode=0o700, exist_ok=True)
+        sync_directory(parent.parent)
+
+
 def atomic_restore(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
+    private_parents(path.parent)
     if value["kind"] == "missing":
         path.unlink(missing_ok=True)
+        sync_directory(path.parent)
         return
-    fd, temporary = tempfile.mkstemp(prefix=".desktop-theming-", dir=path.parent)
+    fd, temporary = tempfile.mkstemp(prefix=".linux-theming-", dir=path.parent)
     temporary = Path(temporary)
     try:
         with os.fdopen(fd, "wb") as stream:
@@ -108,6 +128,7 @@ def atomic_restore(path, value):
             temporary.unlink()
             temporary.symlink_to(value["target"])
         os.replace(temporary, path)
+        sync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -118,21 +139,40 @@ def write_journal(path, value):
 
 @contextlib.contextmanager
 def locked(paths):
-    directory = paths.history.parent
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with (directory / "transaction.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    from .paths import LEGACY_ID
+
+    # Old binaries use this lock too. Keep it until compatibility is retired.
+    directories = [paths.state / LEGACY_ID, paths.history.parent]
+    with contextlib.ExitStack() as stack:
+        for directory in directories:
+            if directory == directories[0] and not directory.exists():
+                continue
+            safe_parents(directory / "transaction.lock", paths.state)
+            private_parents(directory)
+            fd = os.open(directory / "transaction.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            stack.callback(os.close, fd)
+            fcntl.flock(fd, fcntl.LOCK_EX)
         yield
 
 
 def history(paths):
     items = []
-    if not paths.history.exists():
-        return items
-    for path in paths.history.glob("*.json"):
+    roots = getattr(paths, "history_directories", (paths.history,))
+    journals = []
+    for root in roots:
+        safe_parents(root / "entry.json", paths.state)
+        journals.extend(root.glob("*.json"))
+    seen = set()
+    for path in journals:
         try:
+            if path.is_symlink():
+                raise ValueError("History journal is a symlink")
             item = json.loads(path.read_text())
+            if item["id"] in seen or path.stem != item["id"]:
+                raise ValueError("Duplicate or mismatched transaction ID")
+            seen.add(item["id"])
             items.append({"id": item["id"], "created": item["created"],
+                          "migration": bool(item.get("migration")),
                           "status": item["status"], "components": item["components"],
                           "files": len(item["changes"]), "theme": item.get("theme"),
                           "previous_theme": item.get("previous_theme")})
@@ -187,15 +227,15 @@ def carry(path, base, current, target, merger):
     if current in (base, target):
         return target
     if merger is None:
-        raise Conflict(f"{path}: this generated file was changed outside desktop-theming after it was "
+        raise Conflict(f"{path}: this generated file was changed outside linux-theming after it was "
                        "applied. Your version is kept; restore or remove it before trying again.")
     if "symlink" in (base["kind"], current["kind"]):
-        raise Conflict(f"{path}: the linked configuration was changed outside desktop-theming after it "
+        raise Conflict(f"{path}: the linked configuration was changed outside linux-theming after it "
                        "was applied. Your version is kept; resolve it before trying again.")
     try:
         text = merger(text_of(base), text_of(current), text_of(target))
     except merge.Conflict as exc:
-        raise Conflict(f"{path}: {exc} was changed outside desktop-theming after it was applied. "
+        raise Conflict(f"{path}: {exc} was changed outside linux-theming after it was applied. "
                        "Your edit is kept; restore that value or edit the file yourself before trying "
                        "again.") from None
     except ValueError as exc:
@@ -212,7 +252,7 @@ def carry(path, base, current, target, merger):
     elif current["kind"] == "missing" or modes[1] == modes[0]:
         mode = modes[2]
     else:
-        raise Conflict(f"{path}: the file permissions were changed outside desktop-theming after it "
+        raise Conflict(f"{path}: the file permissions were changed outside linux-theming after it "
                        "was applied. Your version is kept; resolve it before trying again.")
     return text_snapshot(text, mode)
 
@@ -234,7 +274,7 @@ def restore_wallpaper(paths, action):
     for item in history(paths):
         if item['status'] != 'applied':
             continue
-        path = paths.history / (item['id'] + '.json')
+        path = paths.journal(item['id'])
         journal = json.loads(path.read_text())
         older = journal.get('wallpaper_action')
         if (older and older['backend'] == 'feh' and older['session'] == action['session']
@@ -252,8 +292,8 @@ def theme_summary(profile, effective=None):
             "effective": effective or ("safe" if not profile.get("wallpaper") or profile.get("mode") == "safe" else "unknown")}
 
 
-def apply(paths, plan):
-    with locked(paths):
+def apply(paths, plan, *, already_locked=False):
+    with contextlib.nullcontext() if already_locked else locked(paths):
         pending = [item for item in history(paths) if item["status"] in
                    ("prepared", "recovery-needed", "undoing")]
         if pending:
@@ -273,6 +313,8 @@ def apply(paths, plan):
         journal = {"id": ident, "created": datetime.now(timezone.utc).isoformat(),
                    "status": "prepared", "components": plan["profile"]["components"],
                    "changes": plan["changes"], "wallpaper_action": action, "settings_actions": settings}
+        if plan.get("migration"):
+            journal["migration"] = True
         journal["theme"] = theme_summary(plan["profile"], plan.get("palette", {}).get("effective"))
         prior = snapshot(paths.profile)
         try:
@@ -286,8 +328,8 @@ def apply(paths, plan):
             for item in plan["changes"]:
                 # Recheck immediately before each replacement as well as preflight.
                 check_changes([item], "before", paths)
-                atomic_restore(Path(item["path"]), item["after"])
                 written.append(item)
+                atomic_restore(Path(item["path"]), item["after"])
             for setting in settings:
                 attempted_settings.append(setting)
                 appearance.apply(setting)
@@ -310,6 +352,8 @@ def apply(paths, plan):
                     journal["status"] = "recovery-needed"
             for item in reversed(written):
                 try:
+                    if snapshot(Path(item["path"])) == item["before"]:
+                        continue
                     check_changes([item], "after", paths)
                     check_restoration_target(Path(item["path"]), item["before"])
                     atomic_restore(Path(item["path"]), item["before"])
@@ -328,7 +372,7 @@ def review_undo(paths, ident, *, recover=False):
                 ("applied", "prepared", "recovery-needed", "undoing")]
     if not eligible or eligible[0]["id"] != ident:
         raise ValueError("Undo/recover the latest active transaction first.")
-    journal = json.loads((paths.history / f"{ident}.json").read_text())
+    journal = json.loads(paths.journal(ident).read_text())
     interrupted = journal["status"] != "applied"
     if interrupted != recover:
         raise ValueError("Use recovery for interrupted changes, undo for applied changes.")
@@ -339,8 +383,15 @@ def review_undo(paths, ident, *, recover=False):
     if action:
         wallpaper.check(action, "after", partial=interrupted)
     proposed = []
+    navigation = None
+    if journal.get("migration"):
+        from . import migration
+
+        navigation = migration.navigation_undo(paths, journal, recover=recover)
     for item in reversed(journal["changes"]):
         target = Path(item["path"])
+        if navigation is not None and target in navigation["paths"]:
+            continue
         root = config_root(paths, target)
         safe_parents(target, root)
         current = snapshot(target)
@@ -351,9 +402,13 @@ def review_undo(paths, ident, *, recover=False):
         reverse = replacement(target, restored, root, before=current)
         if reverse:
             proposed.append(reverse)
+    if navigation is not None:
+        proposed.extend(navigation["changes"])
     payload = {"transaction": ident, "recover": recover,
                "journal": digest(journal), "changes": proposed, "wallpaper_action": action,
                "settings_actions": settings}
+    if navigation is not None:
+        payload["navigation_undo"] = navigation["record"]
     return dict(payload, id=digest(payload))
 
 
@@ -365,8 +420,10 @@ def undo(paths, ident, *, recover=False, reviewed=None):
         plan = review_undo(paths, ident, recover=recover)
         if reviewed is not None and reviewed != plan:
             raise ValueError("The reviewed restoration is stale. Review it again; no files were changed.")
-        path = paths.history / f"{ident}.json"
+        path = paths.journal(ident)
         journal = json.loads(path.read_text())
+        if "navigation_undo" in plan:
+            journal["navigation_undo"] = plan["navigation_undo"]
         action = journal.get("wallpaper_action")
         journal["status"] = "undoing"
         write_journal(path, journal)

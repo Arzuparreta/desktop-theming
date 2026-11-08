@@ -49,6 +49,10 @@ plans, application, export, undo and recovery.
 There is no HTTP server, configuration CLI or MCP implementation.
 The source launcher and AppImage packaging keep the engine local.
 
+The [identity migration](MIGRATION.md) preserves existing Desktop Theming data
+through read-only compatibility, an explicit reviewed transition and ordered
+undo. Historical journal snapshots retain their original paths and identities.
+
 Daily use has a compact view in the same window, with keyboard search/random,
 responsive preview and direct reviewed undo. Last applied state and a browsing
 candidate remain distinct. Optional application-menu registration is a separate,

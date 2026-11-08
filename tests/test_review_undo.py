@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from desktop_theming import changes, service
-from desktop_theming.paths import Paths
+from linux_theming import changes, service
+from linux_theming.paths import Paths
 
 
 class RestorationReviewTests(unittest.TestCase):
@@ -39,7 +39,7 @@ class RestorationReviewTests(unittest.TestCase):
     def test_later_user_edit_is_preserved(self):
         plan = changes.review_undo(self.paths, self.ident)
         self.config.write_text("font_size 30\n")
-        with self.assertRaisesRegex(ValueError, "changed outside desktop-theming"):
+        with self.assertRaisesRegex(ValueError, "changed outside linux-theming"):
             changes.undo(self.paths, self.ident, reviewed=plan)
         self.assertEqual(self.config.read_text(), "font_size 30\n")
 
@@ -58,7 +58,7 @@ class RestorationReviewTests(unittest.TestCase):
         plan["changes"] = []
         with self.assertRaisesRegex(ValueError, "stale"):
             changes.undo(self.paths, self.ident, reviewed=plan)
-        self.assertIn("BEGIN desktop-theming", self.config.read_text())
+        self.assertIn("BEGIN linux-theming", self.config.read_text())
 
     def test_changed_journal_invalidates_review(self):
         plan = changes.review_undo(self.paths, self.ident)

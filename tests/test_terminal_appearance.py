@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from desktop_theming import appearance, changes, inventory, service
-from desktop_theming.paths import Paths
+from linux_theming import appearance, changes, inventory, service
+from linux_theming.paths import Paths
 
 UUID = 'b1dcc9dd-5262-4d8d-a863-c897e6d979b9'
 INITIAL = {'use-theme-colors': True, 'background-color': '#123456', 'foreground-color': '#abcdef',
@@ -34,7 +34,7 @@ class TerminalAppearanceTests(unittest.TestCase):
         self.addCleanup(env.stop)
         self.values = copy.deepcopy(INITIAL)
         self.uuid, self.calls, self.fail_key, self.locked = UUID, [], None, False
-        command = patch('desktop_theming.appearance.command', side_effect=self.command)
+        command = patch('linux_theming.appearance.command', side_effect=self.command)
         command.start()
         self.addCleanup(command.stop)
         self.profile = dict(copy.deepcopy(service.DEFAULT_PROFILE), mode='safe', components=['gnome-terminal'],

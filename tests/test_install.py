@@ -9,7 +9,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 class InstallTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="desktop-theming-install-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="linux-theming-install-")
         self.addCleanup(self.temporary.cleanup)
         self.home = Path(self.temporary.name)
 
@@ -31,7 +31,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_normal_apply_preserves_existing_launcher(self):
-        target = self.home / ".local/bin/desktop-theming"
+        target = self.home / ".local/bin/linux-theming"
         target.parent.mkdir(parents=True)
         target.write_text("existing user launcher\n")
         result = self.install("--apply")
