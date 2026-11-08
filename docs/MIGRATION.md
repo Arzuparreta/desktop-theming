@@ -12,7 +12,7 @@ navigation and journals to the `linux-theming` XDG namespace.
    itself is not a configuration identifier. User-maintained shortcuts and files
    outside the application's ownership are never rewritten.
 2. The new app reads the old profile, saved image folder and theme choices. The
-   banner **Review migration…** (also in **Access…**) opens the exact file diffs.
+   banner **Review migration…** (also in **⋯ → Menu entry and shortcut…**) opens the exact file diffs.
    Opening, discovering and previewing never migrate data. Cancelling keeps the
    old installation intact. New theme application requires completing this step.
 3. Review and approve. Current profile, navigation and ownership move to the new
@@ -21,7 +21,7 @@ navigation and journals to the `linux-theming` XDG namespace.
    change to the corresponding new identifiers. Generated files move only when
    owned, and existing destinations or edited managed settings stop the change.
    Original configuration snapshots and user preferences remain available.
-4. If you registered a menu entry, use **Access… → Update entry…** from the new
+4. If you registered a menu entry, use **⋯ → Menu entry and shortcut… → Update entry…** from the new
    AppImage at its stable path. This separate reviewed transaction replaces the
    owned old entry/icon and registration record, avoiding duplicate entries.
    Later edits to either entry, symlinks or conflicting records stop the change.

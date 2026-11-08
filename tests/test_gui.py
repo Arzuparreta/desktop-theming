@@ -247,6 +247,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in ordered[:2]], ["rofi", "kitty"])
         self.window.setProperty("page", 1)
         self.app.processEvents()
+        QTest.qWait(50)  # Let the newly shown page lay out its rows.
         self.assertLess(self.control("connect-rofi").mapToScene(QPoint(0, 0)).y(),
                         self.control("connect-kitty").mapToScene(QPoint(0, 0)).y())
         before = [item["id"] for item in ordered]
@@ -344,6 +345,24 @@ class GuiTests(unittest.TestCase):
         self.settle()
         self.assertFalse(self.controller.state["pending"])
 
+    def test_history_preview_again_only_changes_the_draft(self):
+        from PIL import Image
+
+        image = self.root / "earlier #1.png"
+        Image.new("RGB", (16, 16), "#336699").save(image)
+        self.controller.previewTheme(str(image), "light", "safe")
+        self.settle()
+        profile = self.controller.state["profile"]
+        self.assertEqual((profile["wallpaper"], profile["polarity"], profile["mode"]), (str(image), "light", "safe"))
+        self.assertTrue(self.controller.state["pending"])
+        self.controller.previewTheme(str(self.root / "missing.png"), "dark", "adaptive")
+        self.settle()
+        self.assertEqual(self.controller.state["profile"]["wallpaper"], str(image))
+        self.assertIn("no longer available", self.controller.state["notice"])
+        self.assertFalse(self.paths.profile.exists())
+        self.assertFalse(self.paths.state.exists())
+        self.assertEqual(self.messages, [])
+
     def test_daily_search_random_and_keyboard_review_do_not_apply_implicitly(self):
         from PIL import Image
 
@@ -354,10 +373,10 @@ class GuiTests(unittest.TestCase):
         self.choose_folder(folder, 2)
         self.window.setProperty("dailyMode", True)
         self.app.processEvents()
-        self.control("dailySearch").setProperty("text", "cAT")
+        self.control("imageSearch").setProperty("text", "cAT")
         self.app.processEvents()
-        self.assertEqual(self.control("dailyImageList").property("count"), 1)
-        self.click("dailyRandom")
+        self.assertEqual(self.control("imageList").property("count"), 1)
+        self.click("randomImage")
         self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "Catana.PNG"))
         self.assertFalse(self.paths.profile.exists())
         self.assertFalse(self.paths.state.exists())
@@ -934,7 +953,7 @@ class GuiTests(unittest.TestCase):
         self.settle()
         self.assertFalse(self.controller.state["error"])
         self.assertEqual(len(self.controller.imageFolder["images"]), count)
-        self.assertEqual(self.control("wallpaperImageList").property("count"), count)
+        self.assertEqual(self.control("imageList").property("count"), count)
 
     def test_folder_images_stay_visible_and_selection_respects_wallpaper_opt_out(self):
         from PIL import Image
@@ -952,20 +971,20 @@ class GuiTests(unittest.TestCase):
             [p for p in self.paths.config.rglob("*") if p.is_file()
              and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
-        self.click("wallpaper-row-0")
+        self.click("image-row-0")
         self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "a #1.png"))
         self.assertTrue(self.controller.state["profile"]["set_wallpaper"])
         self.click("setDesktopWallpaper")
-        self.click("wallpaper-row-1")
+        self.click("image-row-1")
         self.assertEqual(self.controller.state["profile"]["wallpaper"], str(folder / "b.JPG"))
         self.assertFalse(self.controller.state["profile"]["set_wallpaper"])
-        self.assertTrue(self.control("wallpaperImageList").property("visible"))
-        self.assertEqual(self.control("wallpaperImageList").property("count"), 3)
+        self.assertTrue(self.control("imageList").property("visible"))
+        self.assertEqual(self.control("imageList").property("count"), 3)
         for width, height in ((1080, 780), (760, 600)):
             self.window.setWidth(width)
             self.window.setHeight(height)
             self.app.processEvents()
-            row = self.control("wallpaper-row-0")
+            row = self.control("image-row-0")
             self.assertGreater(row.width(), 250)
             self.assertLess(row.mapToScene(row.boundingRect().bottomRight()).x(), width)
         self.assertEqual(
@@ -995,7 +1014,7 @@ class GuiTests(unittest.TestCase):
         for index in range(24):
             Image.new("RGB", (16, 16), "#95a78d").save(folder / f"{index:02}.pNg")
         self.choose_folder(folder, 24)
-        listing = self.control("wallpaperImageList")
+        listing = self.control("imageList")
         listing.forceActiveFocus()
         listing.setProperty("currentIndex", 0)
         QTest.keyClick(self.window, Qt.Key_Down)
@@ -1069,6 +1088,8 @@ class GuiTests(unittest.TestCase):
             self.controller.chooseWallpaper(path.as_uri())
             self.settle()
             image = self.wait_for_image()
+            # Fill is the default desktop-like framing; Fit shows the whole image.
+            self.click("wallpaperPreviewFit")
             for width, height in ((1920, 1080), (1080, 780), (760, 600),
                                   (2560, 720), (1000, 1400), (1920, 1080)):
                 with self.subTest(shape=shape, window=(width, height)):
@@ -1100,12 +1121,14 @@ class GuiTests(unittest.TestCase):
         ImageDraw.Draw(source).rectangle((0, 400, 600, 800), fill="#00ff00")
         source.save(path)
         self.choose_folder(folder, 1)
-        self.click("wallpaper-row-0")
+        self.click("image-row-0")
         image = self.wait_for_image()
         self.click("wallpaperPreviewFit")
+        self.click("wallpaperPreviewSamples")  # Hide sample windows to inspect the image itself.
         self.control("appearanceScroll").property("contentItem").setProperty("contentY", 0)
         QTest.qWait(60)
         frame = self.control("wallpaperPreviewFrame")
+        margin = frame.property("color").name()
         self.assertTrue(frame.property("visible"))
         profile = dict(self.controller.state["profile"])
 
@@ -1125,12 +1148,12 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(sample(x, y), expected)
 
         assert_sample(0.5, 0.05, "#ff0000")
-        assert_sample(0.05, 0.5, "#111318")
+        assert_sample(0.05, 0.5, margin)
         self.click("wallpaperPreviewFill")
         assert_sample(0.05, 0.5, "#00ff00")
         self.assertGreater(image.property("paintedHeight"), frame.height())
         self.click("wallpaperPreviewFit")
-        assert_sample(0.05, 0.5, "#111318")
+        assert_sample(0.05, 0.5, margin)
         self.assertEqual(self.controller.state["profile"], profile)
         self.assertEqual(
             [p for p in self.paths.config.rglob("*") if p.is_file()

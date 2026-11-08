@@ -2,9 +2,9 @@ import QtQuick
 import QtQuick.Controls
 
 Label {
-    color: "#b0b1ba"
-    font.pixelSize: 13
+    color: Theme.textMuted
+    font.pixelSize: Theme.body
     wrapMode: Text.Wrap
     textFormat: Text.PlainText
-    lineHeight: 1.25
+    lineHeight: 1.2
 }

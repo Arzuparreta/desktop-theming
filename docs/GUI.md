@@ -27,19 +27,40 @@ an explicitly selected **legacy** workflow. The GUI never calls their apply hook
 
 ## Daily use
 
-After a theme has been applied, opening the app starts **Quick view**. First
-use opens the full control center. `--quick` and `--center` explicitly choose
-either view. **Quick view / Control center** switches the same window without
-losing a draft, selected applications or review. There is no resident daemon,
-autostart or tray requirement.
+One window has three pages: **Theme**, **Applications** and **History**
+(Ctrl+1/2/3). A status bar at the bottom always shows the previewed theme, whether
+it is applied, what is applied now and which applications a pending change adds
+or restores. It holds **Discard**, **Undo last apply…** and **Review and apply**.
+**Review and apply** is the primary action only when something is pending; on
+first use **Choose applications** leads to the next step instead.
+The header shows the current session, **Check desktop again** (Ctrl+R) and a
+**⋯** menu with **Export theme file…**, **Menu entry and shortcut…** and
+**Keyboard shortcuts** (F1).
 
-Quick view keeps search, **Random**, dark/light and image/default palette
-controls above the preview. Search matches names and relative paths without
-case sensitivity. Random previews an image from the current matching list,
-excluding the candidate when alternatives exist; it never applies it. Optional
-**Subfolders** browsing skips hidden entries and does not follow linked folders
-recursively. Listing is bounded to 5,000 images, 50,000 entries and 2,048 folders;
-an incomplete library is labelled. Choosing a different folder refreshes it.
+After a theme has been applied, opening the app starts a **quick theme change**:
+the Theme page with the search field focused, where Escape closes the window
+without applying. First use opens the same window with a three-step guide
+(image, applications, review). `--quick` and `--center` explicitly choose either
+start. There is no resident daemon, autostart or tray requirement.
+
+The Theme page lists the image library on the left: search, **Random**, a
+thumbnail list with **Applied** and **Preview** markers, the folder path and image
+count, **Change folder…**, **Single image…** and optional **Subfolders**.
+Search matches names and relative paths without case sensitivity. Enter in the
+search field previews the first match; arrow keys in the list preview the
+highlighted image after a short pause; Enter or Space previews immediately.
+Random previews an image from the current matching list, excluding the candidate
+when alternatives exist. Previewing never applies. Optional **Subfolders**
+browsing skips hidden entries and does not follow linked folders recursively.
+Listing is bounded to 5,000 images, 50,000 entries and 2,048 folders; an
+incomplete library is labelled. Choosing a different folder refreshes it.
+
+The right side shows the result: the image in a 16:9 desktop-shaped frame with a
+sample bar and terminal painted in the previewed palette, then **Dark/Light** and
+**From image/Default colors**, the sixteen terminal colors (click one to copy its
+value), the effective palette explanation and **Export file…**. **When you apply**
+lists the applications that will use the palette, marking new ones and those that
+will get their previous colors back, and holds **Set as desktop wallpaper**.
 
 The app labels its last applied profile separately from the preview candidate.
 A remembered image can be an unapplied candidate. **Discard** returns to the
@@ -48,34 +69,39 @@ shown separately when accessible default colors replace image-derived colors.
 Browsing accepts new choices during palette generation and desktop discovery;
 superseded results cannot replace the latest choice.
 
-**Review changes** always prepares a fresh exact plan. An established, unchanged
+**Review and apply** always prepares a fresh exact plan. An established, unchanged
 management scope uses a shorter review with **Show exact changes**. New
 connections, disconnections, links, external-edit notices and recovery retain
 the full attention flow. Every plan still needs a separate explicit approval;
-selecting, filtering and cancelling never apply. Undo is directly available in
-Quick view and after application, and opens a conflict-checked reverse review.
-New history entries identify the theme; older journals remain usable.
+selecting, filtering and cancelling never apply. **Undo last apply…** is shown
+when no draft is pending (and as Ctrl+Z or in History), and opens a
+conflict-checked reverse review. New history entries identify the theme; older
+journals remain usable.
 
-**Activation status** explains the next action for each configured application.
-It reports saved configuration and explicitly unverified runtime appearance.
-It does not signal, restart or reload applications.
+**How to see the colors…** appears after applying and explains the next action
+for each configured application. It reports saved configuration and explicitly
+unverified runtime appearance. It does not signal, restart or reload applications.
 
 | Key | Action |
 |---|---|
-| Ctrl+F | Focus Quick view search |
-| Arrows, then Enter or Space | Navigate and select an image |
+| Ctrl+F | Focus image search |
+| Enter (in search) | Preview the first matching image |
+| Arrows, then Enter or Space | Browse, preview and select an image |
 | Ctrl+Shift+R | Preview a random matching image |
 | Alt+D | Switch dark/light |
 | Alt+M | Switch image/default palette |
+| Left/Right (in a segmented control) | Choose the neighbouring option |
 | Ctrl+Enter | Review changes |
 | Alt+Enter | Approve the currently open review |
-| Escape | Cancel a review/dialog; otherwise close Quick view without applying |
+| Escape | Cancel a review/dialog; clear the search; otherwise close a quick theme change without applying |
 | Ctrl+Z | Review undo, unless a text editor has focus |
 | Ctrl+R | Check the desktop again |
+| Ctrl+1 / 2 / 3 | Theme, Applications, History |
+| F1 | Keyboard shortcuts |
 
 ## Application menu and shortcuts
 
-Open **Access…** from an AppImage stored in a permanent location, such as
+Open **⋯ → Menu entry and shortcut…** from an AppImage stored in a permanent location, such as
 `~/Applications/LinuxTheming-x86_64.AppImage`. **Add to menu…** shows exact
 changes before approval: the per-user Desktop Entry, SVG icon and private
 restoration record. Nothing is registered just by opening an AppImage. Source
@@ -84,8 +110,8 @@ Temporary/extracted/mounted payload paths are refused.
 If the AppImage was opened in extract-and-run mode on a host without FUSE, the
 menu entry preserves that mode. Extraction time remains part of each launch.
 
-The entry has **Quick theme change** and **Control center** actions. **Copy
-quick-view command** provides the command to assign in your desktop's own
+The entry has **Quick theme change** and **Control center** actions; the second
+opens the same window without quick-change behaviour. **Copy command** provides the command to assign in your desktop's own
 shortcut settings. No particular binding is assumed or changed; Mod+w remains
 an example from the legacy personal setup. Most application menus notice new
 entries automatically; some require reopening the menu or another login.
@@ -103,42 +129,44 @@ protects writes. X11/Wayland focus is controlled by the window manager or
 compositor; activation may request attention rather than focus. Offscreen tests
 do not establish compositor or global-shortcut compatibility.
 
-## Control center workflows
+## Workflows
 
-- **Appearance:** choose an image as a color source, select dark/light and
-  image-derived/default colors, and inspect the terminal sample and all sixteen ANSI
-  colors. **Set as desktop wallpaper** is checked by default for a new profile;
-  saved choices and an unchecked option are preserved when switching images.
-  Choose **Image…** for one file or **Folder…** for a sorted, scrollable list of
-  PNG, JPEG, WebP, BMP and TIFF images from the selected library.
+- **Theme:** choose an image as a color source, select dark/light and
+  image-derived/default colors, and inspect the sample windows and all sixteen
+  terminal colors. **Set as desktop wallpaper** is on by default for a new profile;
+  saved choices and a switched-off option are preserved when switching images.
+  Choose **Single image…** for one file or **Change folder…** for a sorted,
+  scrollable list of PNG, JPEG, WebP, BMP and TIFF images from the selected library.
   The list stays open while selecting images and previewing colors, with small,
   asynchronously decoded thumbnails beside each filename. Folder selection only
   lists files; choose a row to preview its palette. Tab focuses the list, arrows
-  navigate, and Enter or Space selects an image. Folder and settings panels scroll
-  independently on small windows, and the terminal preview and ANSI swatches are
-  compact. Choose the folder again to refresh its contents. The session adapter
-  is chosen automatically at review, and only approval changes the wallpaper. Preview failures are
-  visible; fallback palettes include the engine's explanation.
-  The selected wallpaper uses a centered 16:9 preview canvas whose size follows
-  the column width and available window height. **Fit** (the default) preserves
-  the whole image with neutral margins for other aspect ratios; **Fill** shows
-  a centered crop without stretching. These controls affect only the preview,
-  not the desktop adapter's wallpaper placement. The preview also remains
-  available above the folder list; scroll the appearance column on short windows.
+  navigate, and Enter or Space selects an image. The library and preview columns
+  scroll independently on small windows; a fade marks content below the edge.
+  The session adapter is chosen automatically at review, and only approval changes
+  the wallpaper. Preview failures are visible; fallback palettes include the
+  engine's explanation.
+  The preview frame is 16:9 and follows the column width and available window
+  height. **Fill** (the default) shows a centered crop as most desktops do; **Fit**
+  preserves the whole image with neutral margins. The terminal button hides or
+  shows the sample bar and terminal. These controls affect only the preview, not
+  the desktop adapter's wallpaper placement.
   Images honor orientation metadata and decode asynchronously within a bounded
   2560×1440 size, independently of window resizing. Missing/unreadable images
   show an explicit preview message.
-- **Components:** running components and the active session appear first, then
-  applications available on PATH, then the remaining components. Category and
-  name provide stable ordering within each group; changing a selection keeps its
-  row in place. Select **Use palette** beside a supported integration,
-  **Use appearance** for native GNOME/Xfce preferences, or **Use image** for Sway
-  background configuration. Each row explains its exact scope and activation;
-  see [the integration matrix](INTEGRATIONS.md). The application
-  checks the current configuration first. A linked config or existing colors
-  opens an explanation immediately, with separate, initially unchecked choices
-  for creating a local copy and replacing colors. Continue only after consenting
-  to every required change. Cancel leaves selection and files unchanged.
+- **Applications:** running applications and the active session appear first,
+  then applications available on PATH, then the rest, under matching headings.
+  Category and name provide stable ordering within each group; changing a selection
+  keeps its row in place. Turn on the switch beside a supported integration (the
+  palette for files, native appearance for GNOME/Xfce, the image for Sway's
+  background configuration). Chips show **Running**, **Active session**,
+  **Uses palette**, **Will use palette**, **Will restore previous colors** and
+  **Not found**; a banner summarises changes waiting for review. Each row explains
+  its exact scope and activation; see [the integration matrix](INTEGRATIONS.md).
+  The application checks the current configuration first. A linked config or
+  existing colors opens an explanation immediately, naming the link target and
+  the number of color settings to replace, with separate, initially unchecked
+  confirmations for creating a local copy and replacing colors. Continue only
+  after confirming every required change. Cancel leaves selection and files unchanged.
 - **Configuration details:** the optional **Details…** view is read-only. It shows
   executable availability, user processes, active-session evidence, config files,
   color directives/includes and unresolved issues. Required choices never live
@@ -150,8 +178,13 @@ do not establish compositor or global-shortcut compatibility.
   includes and ownership conflicts are explained before selection, without
   bypassing engine checks. Export remains available and explicitly does not
   connect the terminal; manual inclusion is still necessary for an exported file.
-- **Review:** begins with a plain-language summary: palette, affected terminals,
-  preserved preferences, link consequences and how to see the colors. Native
+- **Review:** begins with the theme being applied (image, mode and colors) and a
+  highlighted block for decisions that need attention: local copies of linked
+  files, replaced colors, disconnections and wallpaper changes. A plain-language
+  summary follows: affected applications, preserved preferences and how to see
+  the colors. Your own configuration files are listed before Linux Theming's
+  generated themes and restoration records; the review opens on the first file
+  that needs attention, and diffs are colored by line type. Native
   GNOME/Xfce preference changes show their individual previous/proposed values. Wallpaper
   changes include previous/proposed values per screen or setting. If no safe
   adapter is available, the review explains why; uncheck the wallpaper choice
@@ -161,20 +194,24 @@ do not establish compositor or global-shortcut compatibility.
   engine notes are optional. Apply authorizes only the exact reviewed plan.
   Changes found between selection and review return to the required decisions;
   changes after review invalidate approval. Cancel and Escape do not apply.
-- **Disconnect:** clear **Use palette**, review and apply. The row explains that
+- **Disconnect:** turn off the application's switch, review and apply. The row explains that
   previous colors will be restored. Selection is separate from configured files
   and from the appearance of a running terminal.
-- **History:** the latest active transaction offers reviewed undo or recovery.
+- **History:** each entry shows its image, mode, applications, date and status.
+  **Preview again** loads an earlier image and mode as an unapplied preview. The
+  latest active transaction offers reviewed undo or recovery and names the theme
+  that undo returns to.
   Review shows the exact remaining reverse changes, keeping edits made since then
   to other settings. Edits after review and journal changes invalidate approval;
   conflicts with managed colors name the file and setting without overwriting them.
   Interrupted transactions also show a direct recovery action above the main view.
-- **Export:** choose a native file format from the format selector, inspect the
+- **Export:** open **Export file…** on the Theme page (or **⋯ → Export theme
+  file…**), choose a native file format from the format selector, inspect the
   generated theme, copy it or save a new file. Native GNOME/Xfce preferences are
   reviewed settings, not standalone theme files. Saving refuses existing files
   and symlinks; select a new name.
 
-Ctrl+Enter opens review. **Check desktop** and Ctrl+R rescan inventory while
+Ctrl+Enter opens review. **Check desktop again** and Ctrl+R rescan inventory while
 keeping pending palette and application choices.
 Write/review controls are disabled during serialized exclusive work. Palette
 preview and discovery run independently so browsing remains responsive. Closing

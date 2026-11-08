@@ -93,6 +93,14 @@ class Controller(QObject):
         result["query"] = self._search
         return result
 
+    @Slot(str, result=str)
+    def fileUrl(self, path):
+        return QUrl.fromLocalFile(path).toString() if path else ""
+
+    @Property(str, constant=True)
+    def homePath(self):
+        return str(self.paths.home)
+
     @Property(str, notify=folderChanged)
     def navigationFolderUrl(self):
         folder = self._navigation.get("folder", "")
@@ -157,10 +165,10 @@ class Controller(QObject):
     def problem(self, context, detail):
         if "migration" in detail.lower():
             return {"title": "Data migration needs attention", "body": detail,
-                    "action": "access", "label": "Open access options"}
+                    "action": "access", "label": "Open menu entry options"}
         if context == "launcher":
             return {"title": "Application menu needs attention", "body": detail,
-                    "action": "access", "label": "Open access options"}
+                    "action": "access", "label": "Open menu entry options"}
         return presentation.problem(context, detail)
 
     def invalidate_preview(self):
@@ -302,6 +310,24 @@ class Controller(QObject):
         profile["wallpaper"] = QUrl(url).toLocalFile()
         self.edit(profile)
         self.remember("wallpaper", profile["wallpaper"])
+
+    @Slot(str, str, str)
+    def previewTheme(self, wallpaper_path, polarity, mode):
+        """Load an earlier theme as an unapplied draft; approval still needs a review."""
+        if self._state["busy"] or not self._state["loaded"]:
+            return
+        if wallpaper_path and not Path(wallpaper_path).is_file():
+            self.publish(notice=f"{Path(wallpaper_path).name} is no longer available. Choose another image.")
+            return
+        profile = copy.deepcopy(self._state["profile"])
+        profile["wallpaper"] = wallpaper_path
+        if polarity in ("dark", "light"):
+            profile["polarity"] = polarity
+        if mode in ("adaptive", "safe"):
+            profile["mode"] = mode
+        self.edit(profile)
+        if wallpaper_path:
+            self.remember("wallpaper", wallpaper_path)
 
     @Slot(str)
     def chooseFolder(self, url, remember=True):
@@ -471,7 +497,8 @@ class Controller(QObject):
                     return {"connection": dict(info, continueReview=True)}
             previous = service.load_profile(self.paths)
             plan = service.make_plan(self.paths, profile)
-            return {"plan": plan, "summary": presentation.review_summary(self.paths, plan, previous),
+            items = presentation.review_items(self.paths, plan, previous)
+            return {"plan": plan, "summary": [item["text"] for item in items], "items": items,
                     "level": presentation.review_level(self.paths, plan, previous)}
 
         def complete(result):
@@ -485,7 +512,8 @@ class Controller(QObject):
             if plan.get("wallpaper_action"):
                 files.append(wallpaper.describe(plan["wallpaper_action"]))
             files.extend(appearance.describe(action) for action in plan.get("settings_actions", []))
-            self.publish(review={"kind": "apply", "title": "Review changes", "summary": result["summary"], "level": result["level"],
+            self.publish(review={"kind": "apply", "title": "Review changes", "summary": result["summary"],
+                                 "items": result["items"], "level": result["level"],
                                  "changes": files, "warnings": plan["warnings"]}, palette=plan["palette"])
         self.start(operation, complete, context="review")
 
@@ -556,7 +584,7 @@ class Controller(QObject):
                          migration=migration.status(self.paths),
                          applied=copy.deepcopy(overview["profile"]), hasApplied=self.paths.profile.exists(),
                          review={}, palette={}, exportText="", activation=presentation.activation_guidance(overview["profile"]),
-                         notice=("Data migrated. Your palette is preserved. Update an existing menu entry from Access options."
+                         notice=("Data migrated. Your palette is preserved. Update an existing menu entry from ⋯ → Menu entry and shortcut."
                                  if kind == "migration" else "Changes applied. Reopen applications or use their reload actions where needed."
                                  if result["status"] == "applied" else "Previous configuration restored."))
             # Keep the completion notice while regenerating the preview.

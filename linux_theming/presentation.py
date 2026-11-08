@@ -125,49 +125,65 @@ def activation_guidance(profile):
 
 
 def review_summary(paths, plan, previous):
+    return [item["text"] for item in review_items(paths, plan, previous)]
+
+
+def review_items(paths, plan, previous):
+    """Review sentences with a presentation tone and the application they describe.
+
+    Tones: "lead" (what is applied), "theme" (image name), "change" (per application), "note"
+    (capability/scope detail), "attention" (consent, disconnection or wallpaper),
+    "info" (general guidance). The text is the same as the plain summary.
+    """
     selected = set(plan["profile"]["components"])
     old = set(previous["components"])
     palette = plan["palette"]
+    names = {item[0]: item[1] for item in inventory.COMPONENTS}
     source = "the default palette" if palette["effective"] == "safe" else "the selected image's palette"
+
+    def item(text, tone, app=""):
+        return {"text": text, "tone": tone, "app": app}
+
+    if not plan["changes"] and not plan.get("wallpaper_action") and not plan.get("settings_actions"):
+        return [item("Everything already matches these choices. There is nothing to apply.", "info")]
     if review_level(paths, plan, previous) == "routine":
-        names = {item[0]: item[1] for item in inventory.COMPONENTS}
-        result = [f"Apply {source} with a {palette['polarity']} background.",
-                  "Applications: " + (", ".join(names[c] for c in sorted(selected)) or "Palette profile only") + ". Keep the same management scope."]
+        result = [item(f"Apply {source} with a {palette['polarity']} background.", "lead"),
+                  item("Applications: " + (", ".join(names[c] for c in sorted(selected)) or "Palette profile only")
+                       + ". Same applications as last time.", "change")]
         if plan["profile"]["wallpaper"]:
-            result.append("Image: " + Path(plan["profile"]["wallpaper"]).name)
+            result.append(item("Image: " + Path(plan["profile"]["wallpaper"]).name, "theme"))
         if plan.get("wallpaper_action"):
-            result.append("Change the desktop wallpaper; previous backgrounds are kept for undo.")
-        result.append("Exact changes are available below. Applications may need their own reload action.")
+            result.append(item("Change the desktop wallpaper; previous backgrounds are kept for undo.", "attention"))
+        result.append(item("Exact changes are available below. Applications may need their own reload action.", "info"))
         return result
-    result = [f"Apply {source} with a {palette['polarity']} background."]
+    result = [item(f"Apply {source} with a {palette['polarity']} background.", "lead")]
     for ident in sorted(selected | old):
-        name = next(c[1] for c in inventory.COMPONENTS if c[0] == ident)
+        name = names[ident]
         if ident not in selected:
-            result.append(f"Stop managing {name}'s colors and restore its previous color configuration.")
+            result.append(item(f"Stop managing {name}'s colors and restore its previous color configuration.", "attention", name))
         else:
             if ident == "swaybg":
-                result.append("Configure the selected background image for the next manual Sway reload.")
+                result.append(item("Configure the selected background image for the next manual Sway reload.", "change", name))
             elif ident in appearance.COMPONENTS:
-                result.append(f"Use the reviewed native appearance preferences in {name}.")
+                result.append(item(f"Use the reviewed native appearance preferences in {name}.", "change", name))
             else:
-                result.append(f"Use this palette in {name}. Keep its other preferences.")
+                result.append(item(f"Use this palette in {name}. Keep its other preferences.", "change", name))
             if ident in integrations.CAPABILITIES:
-                result.append(integrations.CAPABILITIES[ident])
-        item = next((c for c in plan["changes"]
-                     if c["path"] == str(inventory.config_target(paths, ident))), None)
-        if item and item["before"]["kind"] == "symlink":
-            result.append(f"Give {name} a separate local configuration. The linked original stays unchanged; "
-                          "future edits to that original will no longer reach this application.")
+                result.append(item(integrations.CAPABILITIES[ident], "note", name))
+        change = next((c for c in plan["changes"]
+                       if c["path"] == str(inventory.config_target(paths, ident))), None)
+        if change and change["before"]["kind"] == "symlink":
+            result.append(item(f"Give {name} a separate local configuration. The linked original stays unchanged; "
+                               "future edits to that original will no longer reach this application.", "attention", name))
         if plan.get("configuration", {}).get(ident, {}).get("has_existing_colors"):
-            result.append(f"Replace {name}'s existing color settings. Included source files stay unchanged.")
+            result.append(item(f"Replace {name}'s existing color settings. Included source files stay unchanged.", "attention", name))
     if not selected and not old:
-        result.append("Save this palette for later. No applications will be themed.")
+        result.append(item("Save this palette for later. No applications will be themed.", "info"))
     elif selected:
-        result.append("Reopen applications or use their own reload actions where needed. Native desktop preferences may take effect immediately.")
+        result.append(item("Reopen applications or use their own reload actions where needed. "
+                           "Native desktop preferences may take effect immediately.", "info"))
     if plan.get("wallpaper_action"):
-        result.append("Set the selected image as your desktop wallpaper. Previous backgrounds are kept for undo.")
-    if not plan["changes"] and not plan.get("wallpaper_action") and not plan.get("settings_actions"):
-        return ["Everything already matches these choices. There is nothing to apply."]
+        result.append(item("Set the selected image as your desktop wallpaper. Previous backgrounds are kept for undo.", "attention"))
     return result
 
 

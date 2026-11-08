@@ -123,7 +123,7 @@ jobs:
 
           Existing Desktop Theming installations are read before any migration.
           Use Review migration… to inspect and approve the reversible data change,
-          then Access… → Update entry… for an existing application-menu entry.
+          then ⋯ → Menu entry and shortcut… → Update entry… for an existing application-menu entry.
           Keep the old state directory: it retains the original undo history.
           See docs/MIGRATION.md for recovery and compatibility details.
 

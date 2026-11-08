@@ -171,7 +171,7 @@ def exercise(app, engine, controller):
                 controller.chooseRandom()
             elif step == 13:
                 if not s["profile"]["wallpaper"].endswith("b.JPG") or not s["palette"]:
-                    raise ValueError("Quick view search/random preview failed")
+                    raise ValueError("Quick theme change search/random preview failed")
                 if controller.paths.profile.exists():
                     raise ValueError("Daily browsing applied an unreviewed theme")
                 controller.searchImages("")
@@ -185,7 +185,7 @@ def exercise(app, engine, controller):
                 from . import migration
 
                 print(migration.exercise())
-                print("PASS: QML, image/folder dialogs, thumbnails, guided connection, quick view, search/random, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
+                print("PASS: QML, image/folder dialogs, thumbnails, guided connection, quick theme change, search/random, preview, review, apply, reviewed undo and export (isolated HOME/XDG).")
                 timer.stop()
                 app.exit(0)
                 return

@@ -84,6 +84,20 @@ class PresentationTests(unittest.TestCase):
         self.assertIn("default palette", " ".join(summary))
         self.assertFalse(self.paths.config.exists())
 
+    def test_review_items_mark_consent_and_keep_the_plain_summary(self):
+        self.write("kitty/kitty.conf", "font_size 12\nbackground #101010\n")
+        profile = dict(service.DEFAULT_PROFILE, components=["kitty"],
+                       resolutions={"kitty": {"replace_colors": True}})
+        plan = service.make_plan(self.paths, profile)
+        items = presentation.review_items(self.paths, plan, service.DEFAULT_PROFILE)
+        self.assertEqual([item["text"] for item in items],
+                         presentation.review_summary(self.paths, plan, service.DEFAULT_PROFILE))
+        self.assertEqual(items[0]["tone"], "lead")
+        replace = [item for item in items if "Replace kitty's existing color settings" in item["text"]]
+        self.assertEqual([(item["tone"], item["app"]) for item in replace], [("attention", "kitty")])
+        self.assertTrue(all(item["tone"] in {"lead", "theme", "change", "note", "attention", "info"} for item in items))
+        self.assertEqual(self.paths.config.joinpath("kitty/kitty.conf").read_text(), "font_size 12\nbackground #101010\n")
+
     def test_export_and_stale_errors_have_relevant_next_actions(self):
         self.assertEqual(presentation.problem("export", "exists")["action"], "save")
         self.assertEqual(presentation.problem("apply", "The reviewed plan is stale")["action"], "review")

@@ -72,7 +72,7 @@ def make_plan(paths, profile, *, which=None):
 
     migration.guard(paths)
     if paths.app_id == LEGACY_ID:
-        raise ValueError("Review the Linux Theming data migration in Access options before applying themes. "
+        raise ValueError("Review the Linux Theming data migration in ⋯ → Menu entry and shortcut before applying themes. "
                          "Your existing profile and undo history are preserved.")
     pending = [item for item in changes.history(paths) if item["status"] in
                ("prepared", "recovery-needed", "undoing")]

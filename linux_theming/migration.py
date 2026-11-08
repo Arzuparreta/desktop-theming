@@ -193,7 +193,7 @@ def plan(paths):
                "wallpaper_action": None,
                "sources": changes.digest({str(p): s for p, s in source.items()}),
                "warnings": ["Keep the existing history as recovery data. Undo this migration before undoing older changes.",
-                            "Menu entries are migrated separately through Update entry in Access options.",
+                            "Menu entries are migrated separately through Update entry in ⋯ → Menu entry and shortcut.",
                             "Close older versions before approving. Desktop settings are not activated or reloaded."]}
     return dict(payload, id=changes.digest(payload))
 

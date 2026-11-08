@@ -8,73 +8,70 @@ ApplicationWindow {
     required property QtObject controller
     readonly property var s: controller.state
     readonly property var imageFolder: controller.imageFolder
-    readonly property int folderImageCount: imageList.count
+    readonly property int folderImageCount: themePage.imageCount
+    // Quick mode: opened to change the theme. Starts on the Theme page with
+    // search focused; Escape closes the window without applying anything.
     property bool dailyMode: false
     property int page: 0
-    readonly property bool canNavigate: !s.busy && s.loaded && !reviewDialog.visible && !inspector.visible && !exportDialog.visible && !connectionDialog.visible && !accessDialog.visible && !activationDialog.visible && !wallpaperPicker.visible && !folderPicker.visible && !exportPicker.visible
-    function setDailyMode(enabled) {
-        dailyMode = enabled
-        page = 0
-        if (enabled && canNavigate) Qt.callLater(dailyView.focusSearch)
+    readonly property bool canNavigate: !s.busy && s.loaded && !reviewDialog.visible && !inspector.visible && !exportDialog.visible && !connectionDialog.visible && !accessDialog.visible && !activationDialog.visible && !shortcutsDialog.visible && !moreMenu.visible && !wallpaperPicker.visible && !folderPicker.visible && !exportPicker.visible
+    onDailyModeChanged: {
+        if (dailyMode) page = 0
+        if (dailyMode && canNavigate) Qt.callLater(themePage.focusSearch)
     }
-    Component.onCompleted: if (dailyMode) { width = 900; Qt.callLater(dailyView.focusSearch) }
+    Component.onCompleted: if (dailyMode) { width = 980; Qt.callLater(themePage.focusSearch) }
     property var inspected: ({})
-    property int diffIndex: 0
-    property bool showAllComponents: false
     property bool problemDetails: false
     readonly property string latestActive: (s.overview.history.filter(h => ["applied", "prepared", "recovery-needed", "undoing"].indexOf(h.status) >= 0)[0] || ({})).id || ""
     readonly property bool recoveryNeeded: s.overview.history.some(h => ["prepared", "recovery-needed", "undoing"].indexOf(h.status) >= 0)
-    readonly property var preview: s.palette || ({})
-    readonly property var special: preview.special || ({ background: "#14171c", foreground: "#d6dae1", cursor: "#cad8cb" })
-    readonly property var colors: preview.colors || ({})
-    width: 1080
+    readonly property bool compactHeader: width < 900
+    readonly property var addedApps: s.hasApplied ? s.profile.components.filter(id => s.applied.components.indexOf(id) < 0) : []
+    readonly property var removedApps: s.hasApplied ? s.applied.components.filter(id => s.profile.components.indexOf(id) < 0) : []
+    function componentName(id) { const c = s.overview.components.find(item => item.id === id); return c ? c.name : id }
+    function themeName(t) { return t ? (t.wallpaper ? fileName(t.wallpaper) : "Default colors") + " · " + (t.polarity === "light" ? "Light" : "Dark") : "" }
+    width: 1120
     height: 780
     minimumWidth: 760
     minimumHeight: 600
     visible: true
     title: "Linux Theming"
-    color: "#1b1d22"
+    color: Theme.window
     font.family: "sans-serif"
-    font.pixelSize: 13
-    palette.window: "#1b1d22"
-    palette.windowText: "#e7e7eb"
-    palette.text: "#e7e7eb"
-    palette.base: "#111318"
-    palette.button: "#25272d"
-    palette.buttonText: "#e7e7eb"
-    palette.highlight: "#cad8cb"
-    palette.highlightedText: "#17191d"
+    font.pixelSize: Theme.body
+    palette.window: Theme.window
+    palette.windowText: Theme.text
+    palette.text: Theme.text
+    palette.base: Theme.surface
+    palette.alternateBase: Theme.raised
+    palette.button: Theme.raised
+    palette.buttonText: Theme.text
+    palette.highlight: Theme.accentBorder
+    palette.highlightedText: Theme.text
+    palette.toolTipBase: Theme.raised
+    palette.toolTipText: Theme.text
+    palette.placeholderText: Theme.textFaint
+    palette.mid: Theme.borderStrong
+    palette.dark: Theme.border
+    palette.light: Theme.hover
     onClosing: function(close) { if (s.busy) { close.accepted = false; controller.explainBusyClose() } }
 
     function openWallpaperPicker() { if (controller.navigationFolderUrl) wallpaperPicker.currentFolder = controller.navigationFolderUrl; wallpaperPicker.open() }
     function closeWallpaperPicker() { wallpaperPicker.close() }
     function openFolderPicker() { if (controller.navigationFolderUrl) folderPicker.currentFolder = controller.navigationFolderUrl; folderPicker.open() }
     function closeFolderPicker() { folderPicker.close() }
-    function selected(id) { return s.profile.components.indexOf(id) >= 0 }
+    function setDailyMode(enabled) { dailyMode = enabled }
+    function fileName(path) { return path ? path.split("/").pop() : "" }
     function evidence(c) {
-        return (c.installed === null ? "Availability unknown" : c.installed ? "Available" : "Not found")
+        return (c.installed === null ? "Availability unknown" : c.installed ? "Installed" : "Not found")
              + " · " + (c.running ? "Running" : "Not running")
              + (c.current_session ? " · Active session" : "")
-             + (c.managed ? " · Theme configured" : "")
+             + (c.managed ? " · Uses the palette" : "")
     }
     function inspect(c) { inspected = c; inspector.open() }
-    function componentStatus(c) {
-        if (c.wallpaper_provider && !c.supported) return "Managed by the reviewed wallpaper control when its session adapter is compatible."
-        if (!c.supported) return "Theme changes are not supported yet."
-        if (selected(c.id) && !c.managed) return "Will use this palette after review and apply."
-        if (!selected(c.id) && c.managed) return "Will restore its previous colors after review and apply."
-        if (c.managed) return "Appearance is configured. " + (c.capability || "")
-        return c.installed !== false ? c.capability : "Not found on this computer. Nothing will be installed."
-    }
     function sessionName() {
         const active = s.overview.components.find(c => c.current_session)
         const desktop = active ? active.name : s.overview.session.desktop
-        return (desktop && desktop !== "Unknown" ? desktop : "Desktop") + (s.overview.session.type === "unknown" ? "" : " / " + (s.overview.session.type || "").toUpperCase())
-    }
-    function historyStatus(status) {
-        return ({"applied": "Applied", "undone": "Restored", "rolled-back": "Cancelled after an error",
-                 "prepared": "Interrupted — recovery needed", "recovery-needed": "Recovery needed",
-                 "undoing": "Restoration interrupted"})[status] || "Unknown state"
+        const type = s.overview.session.type
+        return (desktop && desktop !== "Unknown" ? desktop : "Desktop") + (type && type !== "unknown" ? " · " + (type === "x11" ? "X11" : type.charAt(0).toUpperCase() + type.slice(1)) : "")
     }
     function handleProblem() {
         switch (s.problem.action) {
@@ -82,29 +79,35 @@ ApplicationWindow {
         case "folder": openFolderPicker(); break
         case "save": exportPicker.open(); break
         case "review": controller.review(); break
-        case "history": dailyMode = false; page = 2; break
+        case "history": page = 2; break
         case "access": controller.refreshLauncher(); accessDialog.open(); break
         default: controller.refresh()
         }
     }
+    function openExport() { exportDialog.open(); if (!s.exportText && exportFormat.count > 0) controller.renderExport(exportFormat.model[Math.max(0, exportFormat.currentIndex)].id) }
 
     Connections {
-        target: controller
+        target: window.controller
         function onChanged() {
             if (s.connection.id && !connectionDialog.visible) connectionDialog.open()
             if (!s.connection.id && connectionDialog.visible) connectionDialog.close()
-            if (s.review.kind && !reviewDialog.visible) { diffIndex = 0; reviewDialog.open() }
+            if (s.review.kind && !reviewDialog.visible) reviewDialog.open()
             if (!s.review.kind && reviewDialog.visible) reviewDialog.close()
         }
     }
     Shortcut { sequence: "Ctrl+Return"; enabled: window.canNavigate && !recoveryNeeded; onActivated: controller.review() }
     Shortcut { sequence: "Ctrl+R"; enabled: window.canNavigate && !s.scanning; onActivated: controller.refresh() }
-    Shortcut { sequence: "Ctrl+F"; enabled: window.canNavigate && dailyMode; onActivated: dailyView.focusSearch() }
-    Shortcut { sequence: "Escape"; enabled: window.canNavigate && dailyMode; onActivated: window.close() }
+    Shortcut { sequence: "Ctrl+F"; enabled: window.canNavigate; onActivated: { page = 0; themePage.focusSearch() } }
+    // Escape clears the search, returns to the Theme page, then closes a quick theme change.
+    Shortcut { sequence: "Escape"; enabled: window.canNavigate; onActivated: { if (page !== 0) page = 0; else if (!themePage.handleEscape() && dailyMode) window.close() } }
     Shortcut { sequence: "Ctrl+Shift+R"; enabled: window.canNavigate; onActivated: controller.chooseRandom() }
     Shortcut { sequence: "Alt+D"; enabled: window.canNavigate; onActivated: controller.setOption("polarity", s.profile.polarity === "dark" ? "light" : "dark") }
     Shortcut { sequence: "Alt+M"; enabled: window.canNavigate; onActivated: controller.setOption("mode", s.profile.mode === "adaptive" ? "safe" : "adaptive") }
     Shortcut { sequence: "Ctrl+Z"; enabled: window.canNavigate && !(window.activeFocusItem instanceof TextInput) && !(window.activeFocusItem instanceof TextEdit); onActivated: controller.undoLatest() }
+    Shortcut { sequence: "Ctrl+1"; enabled: window.canNavigate; onActivated: page = 0 }
+    Shortcut { sequence: "Ctrl+2"; enabled: window.canNavigate; onActivated: page = 1 }
+    Shortcut { sequence: "Ctrl+3"; enabled: window.canNavigate; onActivated: page = 2 }
+    Shortcut { sequences: ["F1", "Ctrl+?"]; enabled: window.canNavigate; onActivated: shortcutsDialog.open() }
     FileDialog {
         id: wallpaperPicker
         objectName: "wallpaperPicker"
@@ -131,427 +134,307 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: dailyMode ? 20 : 28
-        spacing: dailyMode ? 12 : 20
-        RowLayout {
-            Layout.fillWidth: true
-            Label { text: "Linux Theming"; color: "#eeeeef"; font.pixelSize: 21; font.weight: Font.DemiBold }
-            Item { Layout.fillWidth: true }
-            Body { text: sessionName(); font.pixelSize: 12 }
-            Command { objectName: "dailyToggle"; text: dailyMode ? "Control center" : "Quick view"; quiet: true; enabled: !s.busy; onClicked: setDailyMode(!dailyMode) }
-            Command { text: "Access…"; quiet: true; enabled: !s.busy; onClicked: { controller.refreshLauncher(); accessDialog.open() } }
-            Command { visible: !dailyMode; text: s.scanning ? "Checking…" : "Check desktop"; quiet: true; enabled: !s.busy && !s.scanning; onClicked: controller.refresh(); Accessible.description: "Check available applications again; keep your pending choices" }
-        }
-        RowLayout {
-            visible: !dailyMode
-            spacing: 4
-            Repeater {
-                model: ["Appearance", "Components", "History"]
-                Command { required property int index; required property string modelData; text: modelData; quiet: window.page !== index; onClicked: window.page = index }
-            }
-            Item { Layout.fillWidth: true }
-            Body { visible: s.busy || s.previewing || s.scanning; text: s.busy ? s.activity : s.previewing ? "Building palette…" : "Checking desktop…"; color: "#cad8cb"; Accessible.role: Accessible.StaticText }
-        }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#34363d" }
-        RowLayout {
-            visible: !!s.migration.needed && !window.recoveryNeeded
-            Layout.fillWidth: true
-            Body { Layout.fillWidth: true; text: s.migration.summary || ""; color: "#e4c793" }
-            Command { objectName: "reviewDataMigration"; text: "Review migration…"; enabled: !s.busy; onClicked: controller.reviewMigration() }
-        }
-        Rectangle {
-            visible: !!s.error || !!s.notice
-            Layout.fillWidth: true
-            implicitHeight: messageColumn.implicitHeight + 24
-            color: s.error ? "#35282a" : "#263029"
-            radius: 6
-            ColumnLayout {
-                id: messageColumn
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 12
-                spacing: 8
-                Body { Layout.fillWidth: true; text: s.error ? s.problem.title || "Something needs attention" : s.notice; color: s.error ? "#f0b8b5" : "#d0dfd1" }
-                Body { visible: !!s.error; Layout.fillWidth: true; text: s.problem.body || "" }
-                RowLayout {
-                    visible: !!s.error || s.activation.length > 0 || !!latestActive
-                    Command { visible: !!s.error; text: s.problem.label || "Check again"; onClicked: handleProblem(); enabled: !s.busy }
-                    Command { visible: !!s.error; text: problemDetails ? "Hide details" : "Show details"; quiet: true; onClicked: problemDetails = !problemDetails }
-                    Command { visible: !s.error && s.activation.length > 0; text: "Activation status…"; quiet: true; onClicked: activationDialog.open() }
-                    Command { visible: !s.error && !!latestActive; text: "Undo…"; quiet: true; enabled: !s.busy; onClicked: controller.undoLatest() }
-                }
-                Body { visible: !!s.error && problemDetails; Layout.fillWidth: true; text: s.error; font.pixelSize: 12 }
-            }
-        }
-        RowLayout {
-            visible: recoveryNeeded
-            Layout.fillWidth: true
-            Body { Layout.fillWidth: true; text: "An earlier change was interrupted. Recover it before applying another palette."; color: "#e4c793" }
-            Command { text: "Open recovery"; onClicked: { dailyMode = false; page = 2 } }
-        }
-        Body {
-            objectName: "appliedReference"
-            visible: !dailyMode
-            Layout.fillWidth: true
-            text: s.hasApplied ? "Last applied by Linux Theming: " + (s.applied.wallpaper || "Default palette") + " · " + s.applied.polarity + (s.pending ? " — Preview has unapplied changes" : "") : "No theme applied by Linux Theming yet. Previewing only."
-            font.pixelSize: 12
-        }
-        StackLayout {
-            currentIndex: dailyMode && window.page === 0 ? 3 : window.page
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+        spacing: 0
 
+        // Header: identity, sections, desktop status and secondary actions.
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 56
+            color: Theme.window
             RowLayout {
-                spacing: 24
-                ScrollView {
-                    id: sourceScroll
-                    objectName: "appearanceScroll"
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 460
-                    Layout.minimumWidth: 330
-                    Layout.fillHeight: true
-                    clip: true
-                    contentWidth: availableWidth
-                    ColumnLayout {
-                        width: sourceScroll.availableWidth
-                        spacing: 12
-                        Label { text: "A palette for your desktop"; font.pixelSize: 19; color: "#e7e7eb" }
-                        Body { visible: !imageFolder.path; Layout.fillWidth: true; text: "Choose colors, then select the applications to theme." }
-                        WallpaperPreview {
-                            id: wallpaperPreview
-                            Layout.fillWidth: true
-                            source: s.wallpaperUrl
-                            availableHeight: sourceScroll.availableHeight
-                        }
-                        RowLayout {
-                            Command { objectName: "chooseImage"; text: "Image…"; enabled: !s.busy && s.loaded; onClicked: openWallpaperPicker() }
-                            Command { objectName: "chooseFolder"; text: "Folder…"; enabled: !s.busy && s.loaded; onClicked: openFolderPicker() }
-                            Command { visible: !!s.profile.wallpaper; text: "Clear"; quiet: true; enabled: !s.busy; onClicked: controller.setOption("wallpaper", "") }
-                        }
-                        CheckBox {
-                            objectName: "setDesktopWallpaper"
-                            text: "Set as desktop wallpaper"
-                            checked: !!s.profile.set_wallpaper
-                            enabled: !s.busy && s.loaded && !!s.profile.wallpaper
-                            onToggled: controller.setWallpaperEnabled(checked)
-                            Accessible.description: "Wallpaper changes require review and approval"
-                        }
-                        Body { visible: !imageFolder.path; Layout.fillWidth: true; text: "Wallpaper changes require review and approval."; font.pixelSize: 12 }
-                        ColumnLayout {
-                            visible: !!imageFolder.path
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Body { Layout.fillWidth: true; text: "Folder images · " + folderImageCount; color: "#e7e7eb" }
-                            TextField {
-                                Layout.fillWidth: true
-                                text: imageFolder.query || ""
-                                placeholderText: "Search images…"
-                                enabled: !s.busy
-                                Accessible.name: "Search folder images"
-                                onTextChanged: controller.searchImages(text)
-                            }
-                            Label {
-                                Layout.fillWidth: true
-                                text: imageFolder.path
-                                textFormat: Text.PlainText
-                                elide: Text.ElideMiddle
-                                color: "#b9bbc4"
-                                font.pixelSize: 11
-                                Accessible.name: "Image folder: " + text
-                                HoverHandler { id: folderHover }
-                                ToolTip.visible: folderHover.hovered
-                                ToolTip.text: text
+                anchors.fill: parent
+                anchors.leftMargin: 20
+                anchors.rightMargin: 14
+                spacing: 6
+                Image { source: "icon.svg"; sourceSize: Qt.size(26, 26); Layout.preferredWidth: 26; Layout.preferredHeight: 26; Accessible.ignored: true }
+                Text {
+                    visible: !window.compactHeader
+                    Layout.leftMargin: 4
+                    Layout.rightMargin: 18
+                    text: "Linux Theming"
+                    color: Theme.text
+                    font.pixelSize: Theme.title
+                    font.weight: Font.DemiBold
+                }
+                Item { visible: window.compactHeader; implicitWidth: 10 }
+                Repeater {
+                    model: [{ label: "Theme", icon: "palette", name: "tabTheme" },
+                            { label: "Applications", icon: "apps", name: "tabApplications" },
+                            { label: "History", icon: "history", name: "tabHistory" }]
+                    Button {
+                        id: tab
+                        required property var modelData
+                        required property int index
+                        objectName: modelData.name
+                        readonly property bool current: window.page === index
+                        Layout.fillHeight: true
+                        hoverEnabled: true
+                        activeFocusOnTab: true
+                        leftPadding: 12
+                        rightPadding: 12
+                        readonly property bool flagged: (index === 1 && (window.addedApps.length > 0 || window.removedApps.length > 0)) || (index === 2 && window.recoveryNeeded)
+                        Accessible.role: Accessible.PageTab
+                        Accessible.name: modelData.label + (flagged ? (index === 2 ? ", recovery needed" : ", changes waiting for review") : "")
+                        Accessible.selected: current
+                        ToolTip.visible: hovered
+                        ToolTip.text: Accessible.name + " · Ctrl+" + (index + 1)
+                        ToolTip.delay: 700
+                        onClicked: window.page = index
+                        contentItem: RowLayout {
+                            spacing: 7
+                            Icon { name: tab.modelData.icon; size: 16; color: tab.current ? Theme.accent : Theme.textMuted }
+                            Text {
+                                text: tab.modelData.label
+                                color: tab.current ? Theme.text : tab.hovered ? Theme.text : Theme.textMuted
+                                font.pixelSize: Theme.body
+                                font.weight: tab.current ? Font.DemiBold : Font.Normal
                             }
                             Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: Math.max(180, sourceScroll.availableHeight - wallpaperPreview.height - 260)
-                                color: "#111318"
-                                border.color: "#3c3e45"
-                                radius: 6
-                                ListView {
-                                    id: imageList
-                                    objectName: "wallpaperImageList"
-                                    anchors.fill: parent
-                                    anchors.margins: 4
-                                    clip: true
-                                    model: imageFolder.images
-                                    spacing: 3
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                                    Accessible.name: "Images in selected folder"
-                                    Accessible.role: Accessible.List
-                                    keyNavigationEnabled: true
-                                    activeFocusOnTab: true
-                                    Keys.onReturnPressed: if (currentItem && !s.busy) currentItem.clicked()
-                                    Keys.onSpacePressed: if (currentItem && !s.busy) currentItem.clicked()
-                                    delegate: ItemDelegate {
-                                        id: imageRow
-                                        objectName: "wallpaper-row-" + index
-                                        required property int index
-                                        required property var modelData
-                                        width: imageList.width - 14
-                                        height: 58
-                                        padding: 6
-                                        highlighted: s.profile.wallpaper === modelData.filePath
-                                        enabled: !s.busy && s.loaded
-                                        activeFocusOnTab: false
-                                        Accessible.name: modelData.fileName
-                                        Accessible.role: Accessible.ListItem
-                                        Accessible.selected: highlighted
-                                        Accessible.description: highlighted ? "Selected palette image" : "Choose this image for the palette"
-                                        onClicked: { imageList.currentIndex = index; controller.chooseWallpaper(modelData.fileUrl) }
-                                        Keys.onReturnPressed: clicked()
-                                        contentItem: RowLayout {
-                                            spacing: 10
-                                            Rectangle {
-                                                Layout.preferredWidth: 68
-                                                Layout.preferredHeight: 46
-                                                color: "#25272d"
-                                                Image {
-                                                    objectName: "wallpaper-thumbnail-" + imageRow.index
-                                                    anchors.fill: parent
-                                                    source: imageRow.modelData.fileUrl
-                                                    sourceSize.width: 136
-                                                    sourceSize.height: 92
-                                                    fillMode: Image.PreserveAspectFit
-                                                    asynchronous: true
-                                                    autoTransform: true
-                                                    cache: false
-                                                }
-                                            }
-                                            Label {
-                                                Layout.fillWidth: true
-                                                text: imageRow.modelData.fileName
-                                                textFormat: Text.PlainText
-                                                elide: Text.ElideMiddle
-                                                color: "#e7e7eb"
-                                            }
-                                            Label { visible: imageRow.highlighted; text: "✓"; color: "#cad8cb" }
-                                        }
-                                        background: Rectangle {
-                                            radius: 4
-                                            color: imageRow.highlighted ? "#303d35" : imageRow.hovered ? "#292c33" : "transparent"
-                                            border.width: (imageRow.activeFocus || (imageList.activeFocus && imageList.currentIndex === imageRow.index)) ? 2 : 1
-                                            border.color: (imageRow.activeFocus || (imageList.activeFocus && imageList.currentIndex === imageRow.index)) ? "#cad8cb" : imageRow.highlighted ? "#78977d" : "transparent"
-                                        }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: modelData.fileName
-                                    }
-                                    Body {
-                                        anchors.centerIn: parent
-                                        width: parent.width - 24
-                                        visible: folderImageCount === 0
-                                        text: "No supported images found. Choose another folder or check its permissions."
-                                    }
-                                }
+                                visible: tab.flagged
+                                implicitWidth: 7
+                                implicitHeight: 7
+                                radius: 4
+                                color: tab.index === 2 ? Theme.danger : Theme.warning
                             }
                         }
-                        Label {
-                            Layout.fillWidth: true
-                            visible: !!s.profile.wallpaper && !imageFolder.path
-                            text: s.profile.wallpaper
-                            textFormat: Text.PlainText
-                            elide: Text.ElideMiddle
-                            color: "#b9bbc4"
-                            font.pixelSize: 11
-                            Accessible.name: "Selected image: " + text
-                            HoverHandler { id: selectedImageHover }
-                            ToolTip.visible: selectedImageHover.hovered
-                            ToolTip.text: text
-                        }
-                    }
-                }
-                ScrollView {
-                    id: previewScroll
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 400
-                    Layout.minimumWidth: 310
-                    Layout.fillHeight: true
-                    clip: true
-                    contentWidth: availableWidth
-                    ColumnLayout {
-                        width: previewScroll.availableWidth
-                        spacing: 12
-                        RowLayout {
-                            Body { text: "Terminal preview"; color: "#e7e7eb" }
-                            Item { Layout.fillWidth: true }
-                            Body { text: preview.effective ? (preview.effective === "safe" ? "Default colors" : "Image colors") + " / " + (preview.polarity === "light" ? "Light" : "Dark") : ""; font.pixelSize: 11 }
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: terminalContent.implicitHeight + 24
-                            radius: 8
-                            color: special.background
-                            border.color: "#3c3e45"
-                            ColumnLayout {
-                                id: terminalContent
+                        background: Item {
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 2
+                                radius: 1
+                                color: tab.current ? Theme.accent : "transparent"
+                            }
+                            Rectangle {
                                 anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 6
-                                Label { text: "~/projects"; font.family: "monospace"; font.pixelSize: 12; color: special.foreground; opacity: 0.65 }
-                                Label { text: "❯ git status"; font.family: "monospace"; font.pixelSize: 14; color: special.foreground }
-                                Label { text: "On branch main"; font.family: "monospace"; font.pixelSize: 13; color: special.foreground }
-                                Label { text: "  modified:  colors.conf"; font.family: "monospace"; font.pixelSize: 13; color: colors.color3 || "#d7bc82" }
-                                Label { text: "  added:     theme.conf"; font.family: "monospace"; font.pixelSize: 13; color: colors.color2 || "#99bd98" }
-                                RowLayout {
-                                    Label { text: "❯"; font.family: "monospace"; font.pixelSize: 14; color: colors.color4 || "#9babcc" }
-                                    Rectangle { width: 8; height: 17; color: special.cursor }
-                                    Item { Layout.fillWidth: true }
-                                }
+                                anchors.topMargin: 10
+                                anchors.bottomMargin: 10
+                                radius: Theme.radiusSmall
+                                color: tab.hovered && !tab.current ? Theme.raised : "transparent"
+                                border.width: tab.visualFocus ? 2 : 0
+                                border.color: Theme.focus
                             }
-                        }
-                        GridLayout {
-                            Layout.alignment: Qt.AlignLeft
-                            columns: 8
-                            columnSpacing: 7
-                            rowSpacing: 7
-                            Repeater {
-                                model: 16
-                                Rectangle {
-                                    required property int index
-                                    implicitWidth: 28
-                                    implicitHeight: 28
-                                    radius: 4
-                                    color: colors["color" + index] || "#36383f"
-                                    border.color: "#555761"
-                                    Accessible.name: "ANSI " + index + ": " + color
-                                    HoverHandler { id: swatchHover }
-                                    ToolTip.visible: swatchHover.hovered
-                                    ToolTip.text: "ANSI " + index + " · " + color
-                                }
-                            }
-                        }
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: previewScroll.availableWidth >= 410 ? 2 : 1
-                            columnSpacing: 16
-                            rowSpacing: 10
-                            ColumnLayout {
-                                Body { text: "Appearance"; color: "#e7e7eb" }
-                                RowLayout {
-                                    Repeater {
-                                        model: ["dark", "light"]
-                                        Command { required property string modelData; text: modelData === "dark" ? "Dark" : "Light"; primary: s.profile.polarity === modelData; enabled: !s.busy && s.loaded; onClicked: controller.setOption("polarity", modelData) }
-                                    }
-                                }
-                            }
-                            ColumnLayout {
-                                Body { text: "Palette"; color: "#e7e7eb" }
-                                RowLayout {
-                                    Repeater {
-                                        model: ["adaptive", "safe"]
-                                        Command { required property string modelData; text: modelData === "adaptive" ? "From image" : "Default colors"; primary: (s.profile.wallpaper ? s.profile.mode : "safe") === modelData; enabled: !s.busy && s.loaded && (modelData !== "adaptive" || !!s.profile.wallpaper); onClicked: controller.setOption("mode", modelData) }
-                                    }
-                                }
-                            }
-                        }
-                        Body { Layout.fillWidth: true; text: !s.profile.wallpaper ? "Default colors are shown until you choose an image." : preview.reason || "Colors are checked for terminal contrast and distinction."; font.pixelSize: 12 }
-                        RowLayout {
-                            Command { text: "Export theme…"; quiet: true; enabled: !s.busy && !!preview.special; onClicked: { exportDialog.open() } }
-                            Item { Layout.fillWidth: true }
                         }
                     }
                 }
+                Item { Layout.fillWidth: true }
+                Chip {
+                    visible: !window.compactHeader && s.loaded
+                    text: sessionName()
+                    tone: "neutral"
+                    Accessible.name: "Current session: " + text
+                }
+                Command {
+                    objectName: "checkDesktop"
+                    quiet: true
+                    iconName: "refresh"
+                    text: s.scanning ? "Checking…" : ""
+                    enabled: !s.busy && !s.scanning
+                    hint: "Ctrl+R"
+                    Accessible.name: "Check desktop again"
+                    Accessible.description: "Look for applications again; your pending choices are kept"
+                    onClicked: controller.refresh()
+                }
+                Command {
+                    id: moreButton
+                    objectName: "moreActions"
+                    quiet: true
+                    iconName: "menu-dots"
+                    Accessible.name: "More actions"
+                    onClicked: moreMenu.open()
+                    Menu {
+                        id: moreMenu
+                        y: moreButton.height + 4
+                        x: moreButton.width - width
+                        MenuItem { text: "Export theme file…"; enabled: !s.busy && !!(s.palette || ({})).special; onTriggered: window.openExport() }
+                        MenuItem { text: "Menu entry and shortcut…"; enabled: !s.busy; onTriggered: { controller.refreshLauncher(); accessDialog.open() } }
+                        MenuSeparator {}
+                        MenuItem { text: "Keyboard shortcuts    F1"; onTriggered: shortcutsDialog.open() }
+                    }
+                }
             }
+            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.border }
+        }
 
-            ScrollView {
-                clip: true
-                contentWidth: availableWidth
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 0
-                    Body { Layout.fillWidth: true; text: "Choose which applications use this palette. Running components appear first, then available applications. Changes are applied only after review."; bottomPadding: 20 }
-                    Repeater {
-                        model: s.overview.components.filter(c => c.supported || showAllComponents || c.installed || c.running || c.configs.some(f => f.exists))
-                        ColumnLayout {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            spacing: 0
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.topMargin: 12
-                                Layout.bottomMargin: 12
-                                spacing: 20
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 4
-                                    RowLayout {
-                                        Label { text: modelData.name; color: "#e7e7eb"; font.pixelSize: 15 }
-                                        Body { text: modelData.category; font.pixelSize: 11 }
-                                    }
-                                    Body { Layout.fillWidth: true; text: evidence(modelData); font.pixelSize: 12 }
-                                    Body { visible: modelData.supported; Layout.fillWidth: true; text: componentStatus(modelData); font.pixelSize: 12 }
-                                }
-                                Command { objectName: "details-" + modelData.id; text: "Details…"; quiet: true; enabled: !s.busy; onClicked: inspect(modelData) }
-                                Choice {
-                                    visible: modelData.supported
-                                    objectName: "connect-" + modelData.id
-                                    text: modelData.id === "swaybg" ? "Use image" : ["gnome", "xfce"].indexOf(modelData.id) >= 0 ? "Use appearance" : "Use palette"
-                                    checked: selected(modelData.id)
-                                    enabled: !s.busy && s.loaded && (modelData.installed !== false || checked)
-                                    onClicked: { controller.selectComponent(modelData.id, !selected(modelData.id)); checked = Qt.binding(function() { return selected(modelData.id) }) }
-                                    Accessible.name: text + " in " + modelData.name
-                                }
-                                Body { visible: !modelData.supported; text: modelData.category === "Wallpaper" ? "Automatic wallpaper" : "Detection only"; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                            }
-                            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#2c2e35" }
-                        }
-                    }
-                    Command { text: showAllComponents ? "Hide unavailable components" : "Show all checked components"; quiet: true; onClicked: showAllComponents = !showAllComponents }
-                    Body { Layout.fillWidth: true; text: "Detection checks common configuration locations and running applications. Custom launch options and sandboxed apps may differ."; font.pixelSize: 11; topPadding: 20 }
-                }
+        // Messages that need attention appear above every page.
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+            Layout.topMargin: visible ? 14 : 0
+            spacing: 8
+            visible: window.recoveryNeeded || (!!s.migration.needed && !window.recoveryNeeded) || !!s.error || !!s.notice
+            Banner {
+                Layout.fillWidth: true
+                visible: window.recoveryNeeded
+                tone: "danger"
+                title: "An earlier change was interrupted"
+                body: "Recover it before applying another theme. Recovery shows exactly what will be restored."
+                Command { text: "Open recovery"; onClicked: window.page = 2 }
             }
-
-            ScrollView {
-                clip: true
-                contentWidth: availableWidth
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 12
-                    Body { Layout.fillWidth: true; visible: !s.overview.history.length; text: "No changes yet. Applied changes and recovery options will appear here."; topPadding: 20 }
-                    Repeater {
-                        model: s.overview.history
-                        Rectangle {
-                            required property var modelData
-                            readonly property bool pending: ["prepared", "recovery-needed", "undoing"].indexOf(modelData.status) >= 0
-                            Layout.fillWidth: true
-                            implicitHeight: historyRow.implicitHeight + 28
-                            radius: 6
-                            color: "#22242a"
-                            RowLayout {
-                                id: historyRow
-                                anchors.fill: parent
-                                anchors.margins: 14
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    Body { text: new Date(modelData.created).toLocaleString(Qt.locale(), Locale.ShortFormat); color: "#e7e7eb" }
-                                    Body { visible: !!modelData.migration; text: "Data migration to Linux Theming"; color: "#e4c793" }
-                                    Body { text: historyStatus(modelData.status) + " · " + modelData.files + " files · " + (modelData.components.join(", ") || "Palette profile"); font.pixelSize: 12 }
-                                    Body { visible: !!modelData.theme; text: modelData.theme ? ((modelData.theme.wallpaper || "Default palette").split("/").pop() + " · " + modelData.theme.polarity + " · " + modelData.theme.effective) : ""; font.pixelSize: 12 }
-                                    Body { visible: !pending && modelData.status === "applied" && modelData.id !== latestActive; text: "Undo the more recent changes first."; font.pixelSize: 12 }
-                                }
-                                Command { text: pending ? "Recover…" : "Undo…"; visible: pending || modelData.status === "applied"; enabled: !s.busy && modelData.id === latestActive; onClicked: controller.reviewUndo(modelData.id, pending) }
-                            }
-                        }
-                    }
-                }
+            Banner {
+                Layout.fillWidth: true
+                visible: !!s.migration.needed && !window.recoveryNeeded
+                tone: "warning"
+                title: "Desktop Theming data can be moved"
+                body: s.migration.summary || ""
+                Command { objectName: "reviewDataMigration"; text: "Review migration…"; enabled: !s.busy; onClicked: controller.reviewMigration() }
             }
-            Daily {
-                id: dailyView
-                controller: window.controller
-                onImageRequested: openWallpaperPicker()
-                onFolderRequested: openFolderPicker()
-                onComponentsRequested: { dailyMode = false; page = 1 }
-                onActivationRequested: activationDialog.open()
+            Banner {
+                objectName: "messageBanner"
+                Layout.fillWidth: true
+                visible: !!s.error || !!s.notice
+                tone: s.error ? "danger" : "success"
+                title: s.error ? s.problem.title || "Something needs attention" : s.notice
+                body: s.error ? (s.problem.body || "") + (problemDetails ? "\n\n" + s.error : "") : ""
+                Command { visible: !!s.error; compact: true; text: s.problem.label || "Check again"; onClicked: handleProblem(); enabled: !s.busy }
+                Command { visible: !!s.error; compact: true; quiet: true; text: problemDetails ? "Hide details" : "Details"; onClicked: problemDetails = !problemDetails }
+                Command { visible: !s.error && s.activation.length > 0; compact: true; text: "How to see the colors…"; onClicked: activationDialog.open() }
             }
         }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#34363d" }
-        RowLayout {
+
+        StackLayout {
+            currentIndex: window.page
             Layout.fillWidth: true
-            Command { objectName: "discardDraft"; visible: s.pending; text: "Discard"; quiet: true; enabled: !s.busy; onClicked: controller.discardDraft() }
-            Body { Layout.fillWidth: true; text: dailyMode ? (s.pending ? "Preview changes · not applied" : "No pending changes") : s.profile.components.length ? "Use palette in: " + s.profile.components.join(", ") : "No applications selected · palette only"; font.pixelSize: 12 }
-            Command { objectName: "reviewChanges"; text: s.busy ? s.activity : "Review changes · Ctrl+Enter"; primary: true; enabled: !s.busy && s.loaded && !recoveryNeeded; onClicked: controller.review() }
+            Layout.fillHeight: true
+            Layout.margins: 20
+            Layout.bottomMargin: 14
+
+            ThemePage {
+                id: themePage
+                controller: window.controller
+                onImageRequested: window.openWallpaperPicker()
+                onFolderRequested: window.openFolderPicker()
+                onApplicationsRequested: window.page = 1
+                onExportRequested: window.openExport()
+                onUndoRequested: if (window.latestActive && !window.recoveryNeeded && window.canNavigate) controller.undoLatest()
+            }
+            ApplicationsPage {
+                id: applicationsPage
+                controller: window.controller
+                onDetailsRequested: function(component) { window.inspect(component) }
+            }
+            HistoryPage {
+                controller: window.controller
+                latestActive: window.latestActive
+                onPreviewRequested: function(wallpaper, polarity, mode) { window.controller.previewTheme(wallpaper, polarity, mode); window.page = 0 }
+            }
+        }
+
+        // Status and decision bar: applied theme, preview candidate, actions.
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 68
+            color: Theme.surface
+            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 1; color: Theme.border }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                spacing: 12
+                Rectangle {
+                    Layout.preferredWidth: 56
+                    Layout.preferredHeight: 34
+                    radius: 4
+                    color: Theme.canvas
+                    clip: true
+                    visible: !!s.profile.wallpaper || s.hasApplied
+                    Image {
+                        anchors.fill: parent
+                        source: s.wallpaperUrl
+                        sourceSize: Qt.size(112, 68)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                    }
+                    Row {
+                        visible: !s.profile.wallpaper
+                        anchors.centerIn: parent
+                        spacing: 2
+                        Repeater { model: [1, 2, 4, 5]; Rectangle { required property int modelData; width: 7; height: 14; radius: 2; color: (s.palette.colors || ({}))["color" + modelData] || Theme.hover } }
+                    }
+                }
+                ColumnLayout {
+                    objectName: "appliedReference"
+                    Layout.fillWidth: true
+                    spacing: 3
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            text: (s.profile.wallpaper ? fileName(s.profile.wallpaper) : "Default colors") + " · " + (s.profile.polarity === "light" ? "Light" : "Dark")
+                            color: Theme.text
+                            font.pixelSize: Theme.body
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideMiddle
+                            textFormat: Text.PlainText
+                        }
+                        Chip {
+                            objectName: "draftState"
+                            text: s.pending ? (s.hasApplied ? "Not applied" : "Preview") : s.hasApplied ? "Applied" : "Preview"
+                            tone: s.pending ? "warning" : s.hasApplied ? "accent" : "neutral"
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: s.pending && s.hasApplied
+                            ? "Applied now: " + themeName(s.applied)
+                              + (window.addedApps.length ? " · adds " + window.addedApps.map(componentName).join(", ") : "")
+                              + (window.removedApps.length ? " · restores " + window.removedApps.map(componentName).join(", ") : "")
+                              + (s.profile.set_wallpaper && s.profile.wallpaper && s.profile.wallpaper !== s.applied.wallpaper ? " · sets wallpaper" : "")
+                            : !s.hasApplied ? "Nothing applied by Linux Theming yet"
+                            : s.profile.components.length ? "Used by " + s.profile.components.map(componentName).join(", ") : "Palette only"
+                        color: Theme.textFaint
+                        font.pixelSize: Theme.caption
+                        elide: Text.ElideMiddle
+                        textFormat: Text.PlainText
+                    }
+                }
+                Command {
+                    objectName: "discardDraft"
+                    visible: s.pending && s.hasApplied
+                    quiet: true
+                    text: "Discard"
+                    enabled: !s.busy
+                    Accessible.description: "Return to the applied theme and applications"
+                    onClicked: controller.discardDraft()
+                }
+                Command {
+                    objectName: "undoLatest"
+                    // Undo reverts files on disk; keep it apart from discarding a draft.
+                    visible: !!window.latestActive && !window.recoveryNeeded
+                    quiet: s.pending
+                    iconName: "undo"
+                    text: s.pending && window.width < 980 ? "Undo…" : "Undo last apply…"
+                    enabled: !s.busy
+                    Accessible.name: "Undo last apply"
+                    Accessible.description: "Review restoring the configuration from before " + themeName(s.applied) + " was applied. Ctrl+Z"
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Shows exactly what will be restored before anything changes · Ctrl+Z"
+                    ToolTip.delay: 500
+                    onClicked: controller.undoLatest()
+                }
+                Command {
+                    objectName: "chooseApplications"
+                    visible: !s.profile.components.length && window.page !== 1 && s.loaded
+                    primary: !!s.profile.wallpaper
+                    iconName: "apps"
+                    text: "Choose applications"
+                    onClicked: window.page = 1
+                }
+                Command {
+                    objectName: "reviewChanges"
+                    primary: (s.pending || !s.hasApplied) && (s.profile.components.length > 0 || window.page === 1)
+                    text: s.busy ? s.activity : s.pending || !s.hasApplied ? "Review changes" : "Review again"
+                    hint: s.busy ? "" : "Ctrl+Enter"
+                    enabled: !s.busy && s.loaded && !recoveryNeeded
+                    Accessible.description: "Prepare the exact changes for approval. Nothing is applied yet."
+                    onClicked: controller.review()
+                }
+            }
         }
     }
 
@@ -567,140 +450,98 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    ReviewDialog {
+        id: reviewDialog
+        controller: window.controller
+        windowWidth: window.width
+        windowHeight: window.height
+    }
+
+    Sheet {
         id: inspector
         objectName: "inspector"
-        anchors.centerIn: parent
-        width: Math.min(window.width - 64, 720)
-        height: Math.min(window.height - 64, 680)
-        modal: true
-        title: (inspected.name || "Component") + " — configuration details"
-        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
+        width: Math.min(window.width - 40, 720)
+        height: Math.min(window.height - 40, 640)
+        title: (inspected.name || "Application") + " details"
+        subtitle: evidence(inspected)
         contentItem: ColumnLayout {
-            spacing: 16
+            spacing: 14
             ScrollView {
+                id: inspectorScroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentWidth: availableWidth
                 clip: true
                 ColumnLayout {
-                    width: parent.width
-                    spacing: 14
-                    Body { Layout.fillWidth: true; text: evidence(inspected) }
-                    Body { Layout.fillWidth: true; text: inspected.id === "swaybg" ? "Select Use image to configure Sway's background for your next manual reload. No running process is replaced."
-                        : inspected.category === "Wallpaper" ? "Wallpaper changes are selected beside the image. The compatible method is detected during review; an installed tool alone does not establish support."
-                        : inspected.supported ? "Select the appearance control in the components list. These details are read-only." : "Detected only. Theme changes for this component are not supported yet." }
-                    Body { Layout.fillWidth: true; text: inspected.capability || "" }
+                    width: inspectorScroll.availableWidth
+                    spacing: 12
+                    Body {
+                        Layout.fillWidth: true
+                        color: Theme.text
+                        text: inspected.id === "swaybg" ? "Turn on the switch in Applications to configure Sway's background for your next manual reload. No running process is replaced."
+                            : inspected.category === "Wallpaper" ? "Wallpaper changes are chosen on the Theme page. The compatible method is detected during review; an installed tool alone does not establish support."
+                            : inspected.supported ? "Use the switch in Applications to connect it. These details are read-only." : "Detected only. Theme changes for this application are not supported yet." }
+                    Body { Layout.fillWidth: true; visible: !!text; text: inspected.capability || "" }
+                    Text { text: "Configuration files"; color: Theme.text; font.pixelSize: Theme.body; font.weight: Font.DemiBold; visible: (inspected.configs || []).length > 0 }
                     Repeater {
                         model: inspected.configs || []
-                        Body { required property var modelData; Layout.fillWidth: true; text: modelData.path + (modelData.symlink ? " → " + modelData.target : "") + (modelData.exists ? "" : " (missing)"); font.family: "monospace"; font.pixelSize: 12 }
+                        Body { required property var modelData; Layout.fillWidth: true; text: modelData.path + (modelData.symlink ? " → " + modelData.target : "") + (modelData.exists ? "" : " (missing)"); font.family: Theme.mono; font.pixelSize: Theme.caption }
                     }
                     Repeater {
                         model: (inspected.configuration || ({})).issues || []
-                        Body { required property string modelData; Layout.fillWidth: true; text: modelData; color: "#f0b8b5" }
+                        Body { required property string modelData; Layout.fillWidth: true; text: modelData; color: Theme.danger }
                     }
-                    Body { visible: !!inspected.supported; text: "Existing color sources"; color: "#e7e7eb" }
-                    Body { visible: !!inspected.supported && !((inspected.configuration || ({})).sources || []).length; text: "No color sources found in conventional configuration." }
+                    Text { visible: !!inspected.supported; text: "Existing color settings"; color: Theme.text; font.pixelSize: Theme.body; font.weight: Font.DemiBold }
+                    Body { visible: !!inspected.supported && !((inspected.configuration || ({})).sources || []).length; text: "None found in the usual configuration files." }
                     Repeater {
                         model: (inspected.configuration || ({})).sources || []
-                        Body { required property var modelData; Layout.fillWidth: true; text: modelData.path + ":" + modelData.line + "\n" + modelData.directive + " " + modelData.value + (modelData.target ? "\n→ " + modelData.target : ""); font.family: "monospace"; font.pixelSize: 12 }
+                        Body { required property var modelData; Layout.fillWidth: true; text: modelData.path + ":" + modelData.line + "\n" + modelData.directive + " " + modelData.value + (modelData.target ? "\n→ " + modelData.target : ""); font.family: Theme.mono; font.pixelSize: Theme.caption }
                     }
-                    Body { Layout.fillWidth: true; text: (inspected.configuration || ({})).scope || "Conventional paths and user processes only."; font.pixelSize: 11 }
+                    Body { Layout.fillWidth: true; text: (inspected.configuration || ({})).scope || "Checked usual paths and your own processes only."; font.pixelSize: Theme.caption; color: Theme.textFaint }
                 }
             }
             Command { text: "Done"; Layout.alignment: Qt.AlignRight; onClicked: inspector.close() }
         }
     }
 
-    Dialog {
-        id: reviewDialog
-        objectName: "reviewDialog"
-        // Modal popups block window shortcuts outside their own content.
-        Shortcut {
-            sequences: ["Alt+Return", "Alt+Enter"]
-            enabled: reviewDialog.visible && approveChanges.enabled
-            onActivated: controller.approve()
-        }
-        anchors.centerIn: parent
-        readonly property bool routine: s.review.level === "routine"
-        property bool showChanges: false
-        width: window.width - 48
-        height: routine && !showChanges ? Math.min(420, window.height - 48) : window.height - 48
-        modal: true
-        closePolicy: s.busy ? Popup.NoAutoClose : Popup.CloseOnEscape
-        title: s.review.title || "Review changes"
-        onOpened: { technicalNotes.checked = false; showChanges = !routine; cancelReviewButton.forceActiveFocus() }
-        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
-        onRejected: controller.cancelReview()
-        contentItem: ColumnLayout {
-            spacing: 14
-            ScrollView {
-                Layout.fillWidth: true
-                Layout.maximumHeight: 190
-                Layout.preferredHeight: warningsColumn.implicitHeight
-                contentWidth: availableWidth
-                clip: true
-                ColumnLayout {
-                    id: warningsColumn
-                    width: parent.width
-                    Repeater { model: s.review.summary || []; Body { required property string modelData; text: modelData; Layout.fillWidth: true; font.pixelSize: 12 } }
-                }
-            }
-            Command { visible: reviewDialog.routine; text: reviewDialog.showChanges ? "Hide exact changes" : "Show exact changes (" + (s.review.changes || []).length + ")"; quiet: true; onClicked: reviewDialog.showChanges = !reviewDialog.showChanges }
-            ComboBox {
-                id: fileSelect
-                visible: reviewDialog.showChanges
-                Layout.fillWidth: true
-                model: s.review.changes || []
-                textRole: "label"
-                currentIndex: diffIndex
-                onActivated: function(index) { diffIndex = index }
-                Accessible.name: "Changed file"
-            }
-            Body { visible: reviewDialog.showChanges; Layout.fillWidth: true; text: ((s.review.changes || [])[diffIndex] || ({})).path || ""; font.pixelSize: 11 }
-            Code {
-                visible: reviewDialog.showChanges
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                text: ((s.review.changes || [])[diffIndex] || ({})).diff || (s.review.kind === "undo" ? "Files already match their original state. Restore completes recovery by marking this transaction as undone." : "No file changes.")
-            }
-            Command { id: technicalNotes; quiet: true; checkable: true; text: checked ? "Hide technical notes" : "Show technical notes"; visible: !!(s.review.warnings || []).length }
-            Body { visible: technicalNotes.checked; Layout.fillWidth: true; text: (s.review.warnings || []).join("\n"); font.pixelSize: 11 }
-            RowLayout {
-                Layout.fillWidth: true
-                Body { Layout.fillWidth: true; text: (s.review.changes || []).length + " changes · " + (s.review.kind === "undo" ? "Restoration is checked for conflicts" : "You can undo these changes from History"); font.pixelSize: 12 }
-                Command { id: cancelReviewButton; text: "Cancel"; enabled: !s.busy; onClicked: controller.cancelReview() }
-                Command { id: approveChanges; objectName: "approveChanges"; text: (s.review.kind === "undo" ? "Restore changes" : "Apply changes") + " · Alt+Enter"; primary: true; enabled: !s.busy && (s.review.kind === "undo" || !!s.review.allowEmpty || (s.review.changes || []).length > 0); onClicked: controller.approve() }
-            }
-        }
-    }
-
-    Dialog {
+    Sheet {
         id: activationDialog
-        anchors.centerIn: parent
-        width: Math.min(700, window.width - 48)
-        height: Math.min(600, window.height - 48)
-        modal: true
-        title: "Saved configuration and activation"
-        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
+        width: Math.min(680, window.width - 40)
+        height: Math.min(560, window.height - 40)
+        title: "How to see the new colors"
+        subtitle: "The files were saved. Linux Theming has not signalled, restarted or observed these running applications."
         contentItem: ColumnLayout {
             spacing: 12
-            Body { Layout.fillWidth: true; text: "The files were saved. Linux Theming has not observed the appearance of these running applications. No application has been signalled or restarted." }
             ScrollView {
+                id: activationScroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentWidth: availableWidth
                 clip: true
                 ColumnLayout {
-                    width: parent.width
-                    spacing: 12
+                    width: activationScroll.availableWidth
+                    spacing: 8
                     Repeater {
                         model: s.activation
-                        ColumnLayout {
+                        Rectangle {
                             required property var modelData
                             Layout.fillWidth: true
-                            Body { text: modelData.name + " · Configuration saved"; color: "#e7e7eb" }
-                            Body { Layout.fillWidth: true; text: modelData.message; font.pixelSize: 12 }
+                            implicitHeight: activationRow.implicitHeight + 22
+                            radius: Theme.radius
+                            color: Theme.raised
+                            ColumnLayout {
+                                id: activationRow
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.margins: 14
+                                spacing: 4
+                                RowLayout {
+                                    Text { text: modelData.name; color: Theme.text; font.pixelSize: Theme.body; font.weight: Font.DemiBold }
+                                    Chip { text: "Saved"; tone: "accent"; iconName: "check" }
+                                }
+                                Body { Layout.fillWidth: true; text: modelData.message; font.pixelSize: Theme.caption + 1 }
+                            }
                         }
                     }
                 }
@@ -709,62 +550,71 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    Sheet {
         id: accessDialog
         objectName: "accessDialog"
-        anchors.centerIn: parent
-        width: Math.min(680, window.width - 48)
-        modal: true
-        title: "Open Linux Theming your way"
-        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
+        width: Math.min(660, window.width - 40)
+        height: Math.min(window.height - 40, implicitHeight)
+        title: "Menu entry and shortcut"
+        subtitle: "Add a reversible entry to your application menu. Choose your own shortcut in your desktop's keyboard settings; no key binding is changed here."
         contentItem: ColumnLayout {
-            spacing: 16
-            Body { Layout.fillWidth: true; text: "Add a reversible entry to your application menu. Choose your own shortcut in your desktop’s keyboard settings; no key binding is changed here." }
-            Body { visible: !!s.migration.needed; Layout.fillWidth: true; text: s.migration.summary || ""; color: "#e4c793" }
-            Command { objectName: "migrateIdentity"; visible: !!s.migration.needed; text: "Review data migration…"; enabled: !s.busy; onClicked: { accessDialog.close(); controller.reviewMigration() } }
-            Body { visible: !!s.launcher.error; Layout.fillWidth: true; text: s.launcher.error || ""; color: "#e4c793" }
-            Body { visible: !!s.launcher.repair_needed; Layout.fillWidth: true; text: "The registered executable or menu files need repair. Open this AppImage from its stable location and review Update entry."; color: "#e4c793" }
+            spacing: 14
+            Banner {
+                Layout.fillWidth: true
+                visible: !!s.migration.needed
+                tone: "warning"
+                title: "Data migration available"
+                body: s.migration.summary || ""
+                Command { objectName: "migrateIdentity"; text: "Review migration…"; enabled: !s.busy; onClicked: { accessDialog.close(); controller.reviewMigration() } }
+            }
+            Banner { Layout.fillWidth: true; visible: !!s.launcher.error; tone: "warning"; title: s.launcher.error || "" }
+            Banner {
+                Layout.fillWidth: true
+                visible: !!s.launcher.repair_needed
+                tone: "warning"
+                title: "The menu entry needs repair"
+                body: "Open this AppImage from its stable location and choose Update entry."
+            }
             Command { visible: !!s.launcher.interrupted; text: "Recover interrupted menu change…"; onClicked: { accessDialog.close(); controller.recoverLauncher() } }
-            Body { Layout.fillWidth: true; text: "Use Quick view for daily changes, or Control center for applications and recovery. Reopening the app activates its existing window where your desktop allows it." }
-            Code { Layout.fillWidth: true; Layout.preferredHeight: 76; text: s.launcher.command || "Open the AppImage from a stable location to register a menu entry." }
+            Body { Layout.fillWidth: true; text: "Use this command for a keyboard shortcut. It opens Linux Theming ready to change the theme; opening it again brings the existing window forward where your desktop allows it." }
+            Code { Layout.fillWidth: true; Layout.preferredHeight: 64; text: s.launcher.command || "Open the AppImage from a stable location to register a menu entry." }
             RowLayout {
-                Command { text: "Copy quick-view command"; enabled: !!s.launcher.command; onClicked: controller.copyText(s.launcher.command) }
+                Command { text: "Copy command"; compact: true; enabled: !!s.launcher.command; onClicked: controller.copyText(s.launcher.command) }
                 Item { Layout.fillWidth: true }
             }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
             RowLayout {
                 Command { text: "Close"; onClicked: accessDialog.close() }
                 Item { Layout.fillWidth: true }
-                Command { objectName: "removeLauncher"; text: "Remove entry…"; enabled: !s.busy && !!s.launcher.registered; onClicked: { accessDialog.close(); controller.reviewLauncher(true) } }
+                Command { objectName: "removeLauncher"; text: "Remove entry…"; danger: true; enabled: !s.busy && !!s.launcher.registered; onClicked: { accessDialog.close(); controller.reviewLauncher(true) } }
                 Command { objectName: "registerLauncher"; text: s.launcher.registered ? "Update entry…" : "Add to menu…"; primary: true; enabled: !s.busy && !!s.launcher.available; onClicked: { accessDialog.close(); controller.reviewLauncher(false) } }
             }
         }
     }
 
-    Dialog {
+    Sheet {
         id: exportDialog
         objectName: "exportDialog"
-        anchors.centerIn: parent
-        width: Math.min(window.width - 64, 720)
-        height: Math.min(window.height - 64, 620)
-        modal: true
-        title: "Export theme"
-        background: Rectangle { color: "#202228"; border.color: "#41434c"; radius: 10 }
+        width: Math.min(window.width - 40, 760)
+        height: Math.min(window.height - 40, 640)
+        title: "Export theme file"
+        subtitle: "Save or copy a theme file for your own configuration. Exporting does not connect an application or change its settings."
         contentItem: ColumnLayout {
-            spacing: 16
-            Body { Layout.fillWidth: true; text: "Save or copy a theme file for your own configuration. Export does not connect an application or change its settings." }
-            Body { Layout.fillWidth: true; visible: !!s.notice; text: s.notice; color: "#d0dfd1" }
-            Body { Layout.fillWidth: true; visible: !!s.error; text: (s.problem.title || "") + "\n" + (s.problem.body || ""); color: "#f0b8b5" }
+            spacing: 12
+            Banner { Layout.fillWidth: true; visible: !!s.notice && exportDialog.visible; tone: "success"; title: s.notice }
+            Banner { Layout.fillWidth: true; visible: !!s.error && exportDialog.visible; tone: "danger"; title: s.problem.title || ""; body: s.problem.body || "" }
             RowLayout {
+                spacing: 10
+                Text { text: "Format"; color: Theme.textMuted; font.pixelSize: Theme.body }
                 ComboBox {
                     id: exportFormat
                     objectName: "exportFormat"
-                    Layout.preferredWidth: 250
+                    Layout.preferredWidth: 260
                     model: s.overview.components.filter(c => c.supported && ["gnome", "xfce"].indexOf(c.id) < 0)
                     textRole: "name"
                     enabled: !s.busy
                     onActivated: controller.renderExport(model[currentIndex].id)
                 }
-                Command { text: "Preview format"; enabled: !s.busy && exportFormat.currentIndex >= 0; onClicked: controller.renderExport(exportFormat.model[exportFormat.currentIndex].id) }
                 Item { Layout.fillWidth: true }
             }
             Code { Layout.fillWidth: true; Layout.fillHeight: true; text: s.exportText || "Choose a format to preview, copy or save." }
@@ -774,6 +624,49 @@ ApplicationWindow {
                 Command { text: "Copy"; enabled: !!s.exportText && !s.busy; onClicked: controller.copyText(s.exportText) }
                 Command { text: "Save as…"; primary: true; enabled: !!s.exportText && !s.busy; onClicked: exportPicker.open() }
             }
+        }
+    }
+
+    Sheet {
+        id: shortcutsDialog
+        objectName: "shortcutsDialog"
+        width: Math.min(560, window.width - 40)
+        height: Math.min(window.height - 40, implicitHeight)
+        title: "Keyboard shortcuts"
+        subtitle: "Navigating and previewing never applies anything."
+        contentItem: ColumnLayout {
+            spacing: 14
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 20
+                rowSpacing: 8
+                Repeater {
+                    model: [["Ctrl+F", "Search images"], ["↑ ↓", "Browse and preview images"], ["Enter", "Preview the first match or the highlighted image"],
+                            ["Ctrl+Shift+R", "Preview a random image"], ["Alt+D", "Switch dark / light"], ["Alt+M", "Switch image / default colors"],
+                            ["Ctrl+Enter", "Review changes"], ["Alt+Enter", "Apply the open review"], ["Ctrl+Z", "Review undo of the last change"],
+                            ["Ctrl+1 / 2 / 3", "Theme, Applications, History"], ["Ctrl+R", "Check the desktop again"],
+                            ["Escape", "Clear search, cancel a dialog, or close a quick theme change"]]
+                    delegate: Item {
+                        required property var modelData
+                        required property int index
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        implicitHeight: 26
+                        Rectangle {
+                            id: keyCap
+                            width: Math.max(110, keyText.implicitWidth + 16)
+                            height: 24
+                            radius: 5
+                            color: Theme.raised
+                            border.color: Theme.borderStrong
+                            Text { id: keyText; anchors.centerIn: parent; text: modelData[0]; color: Theme.text; font.pixelSize: Theme.caption; font.family: Theme.mono }
+                        }
+                        Text { anchors.left: keyCap.right; anchors.leftMargin: 14; anchors.right: parent.right; anchors.verticalCenter: keyCap.verticalCenter; text: modelData[1]; color: Theme.textMuted; font.pixelSize: Theme.body; elide: Text.ElideRight }
+                    }
+                }
+            }
+            Command { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: shortcutsDialog.close() }
         }
     }
 }

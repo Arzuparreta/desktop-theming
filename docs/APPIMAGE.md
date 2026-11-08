@@ -5,7 +5,7 @@ Pillow, PySide6, Qt libraries/QML modules and platform plugins. It uses the host
 PATH and HOME/XDG directories without a broker or sandbox. Desktop discovery only reads configuration; desktop changes still require review
 and approval in the GUI. Choosing an image or folder saves only navigation state.
 Running an AppImage does not install packages, a second copy or a background
-service. Optional **Access… → Add to menu…** registers a reviewed, reversible
+service. Optional **⋯ → Menu entry and shortcut… → Add to menu…** registers a reviewed, reversible
 per-user application-menu entry. It starts the existing AppImage at its stable
 path and assigns no keyboard shortcut. [Daily access and repair](GUI.md#application-menu-and-shortcuts)
 describe the explicit workflow. Local and release AppImages use the same HOME/XDG profile and history.
@@ -108,7 +108,7 @@ Menu registration adds only `$XDG_DATA_HOME/applications/linux-theming.desktop`,
 the SVG in `icons/hicolor/scalable/apps/`, and private registration/recovery data
 under `$XDG_STATE_HOME/linux-theming/launcher/`. It keeps its journal separate
 from theme transactions so removal remains available after later theme changes.
-An interrupted menu change has its own reviewed recovery action in **Access…**.
+An interrupted menu change has its own reviewed recovery action in **⋯ → Menu entry and shortcut…**.
 
 ### Release 0.1.0 startup failure on newer Mesa systems
 

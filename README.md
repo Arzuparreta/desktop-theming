@@ -9,7 +9,7 @@ A modular Linux desktop theming engine. It discovers an existing desktop,
 inspects appearance settings and prepares reversible theme changes while
 preserving unrelated preferences.
 
-![Linux Theming showing the catana-verde-ascii wallpaper and its generated palette](docs/screenshots/appearance.png)
+![Linux Theming Theme page: an image library, the selected wallpaper with a sample bar and terminal in its generated palette, and the applied state](docs/screenshots/theme.png)
 
 **Current state:** a local PySide6 / Qt Quick application over the Python engine.
 Choose a palette, inspect components and color sources, review exact changes,
@@ -33,20 +33,22 @@ python3 -m venv .venv
 ```
 
 Opening the application and previewing colors do not change desktop settings.
-Returning users start in **Quick view**: search the remembered image library,
-preview a random image, switch modes and review changes using the keyboard.
-The full control center remains one click away. `--quick` / `--center` select
-either view, and a repeated launch activates the existing instance in the same
+One window has **Theme**, **Applications** and **History** pages. The Theme page
+shows the image on a desktop-shaped preview with a sample bar and terminal in the
+generated palette. Returning users start with a quick theme change: search the
+remembered image library, preview a random image, switch modes and review changes
+using the keyboard; Escape closes without applying. `--quick` / `--center` select
+either start, and a repeated launch activates the existing instance in the same
 graphical session where the compositor permits it.
 
-From the AppImage, **Access… → Add to menu…** offers reviewed, reversible
-application-menu registration at its current stable path. Copy the quick-view
+From the AppImage, **⋯ → Menu entry and shortcut… → Add to menu…** offers reviewed,
+reversible application-menu registration at its current stable path. Copy the
 command there to choose a shortcut in your desktop settings. No key binding,
 autostart or background service is installed. [Daily workflow and shortcuts](docs/GUI.md#daily-use).
 
-**Set as desktop wallpaper** is checked by default for a new profile; uncheck
-it to use only the image’s palette. Your choice is kept when switching images.
-Choose **Folder…** to browse its images in a persistent list with small thumbnails.
+**Set as desktop wallpaper** is on by default for a new profile; turn it off
+to use only the image’s palette. Your choice is kept when switching images.
+Choose a folder to browse its images in a persistent list with small thumbnails.
 Review and approve to change the wallpaper. The GUI runs without a server or
 background service. [GUI workflows](docs/GUI.md) and
 [AppImage builds, artifacts and compatibility](docs/APPIMAGE.md) describe usage
@@ -118,7 +120,7 @@ See [validation evidence and limitations](docs/DEVELOPMENT.md#support-evidence).
 Upgrading from Desktop Theming reads your existing setup first. **Review
 migration…** shows the exact changes before moving active data and references.
 Old history remains available for ordered undo. Registered menu entries have a
-separate reviewed update in **Access…**. See [migration and recovery](docs/MIGRATION.md)
+separate reviewed update in **⋯ → Menu entry and shortcut…**. See [migration and recovery](docs/MIGRATION.md)
 before deleting old directories or returning to an older version.
 
 Respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`, with these normal defaults:
