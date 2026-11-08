@@ -414,6 +414,7 @@ class GuiTests(unittest.TestCase):
     def test_inventory_started_before_apply_cannot_restore_old_applied_state(self):
         from linux_theming import service
 
+        self.operation_timeout = 30
         real_overview = service.overview
         old = self.controller.state["overview"]
         started, release = threading.Event(), threading.Event()
@@ -423,12 +424,14 @@ class GuiTests(unittest.TestCase):
             calls.append(1)
             if len(calls) == 1:
                 started.set()
-                release.wait(8)
+                # Keep this read stale until the test explicitly releases it.
+                # A wall-clock expiry can invalidate the race on a slow runner.
+                release.wait()
                 return old
             return real_overview(paths)
 
         def wait_operation():
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + self.operation_timeout
             while self.controller.state["busy"] and time.monotonic() < deadline:
                 self.app.processEvents()
                 QTest.qWait(10)
@@ -437,7 +440,7 @@ class GuiTests(unittest.TestCase):
         with patch.object(service, "overview", side_effect=discover):
             try:
                 self.controller.refresh()
-                self.assertTrue(started.wait(1))
+                self.assertTrue(started.wait(5))
                 self.controller.setOption("polarity", "light")
                 self.controller.review()
                 wait_operation()
