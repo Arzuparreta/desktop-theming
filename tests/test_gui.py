@@ -975,6 +975,48 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(len(self.controller.imageFolder["images"]), count)
         self.assertEqual(self.control("imageList").property("count"), count)
 
+    def wait_for_images(self, count):
+        deadline = time.monotonic() + 5
+        while len(self.controller.imageFolder["images"]) != count:
+            self.app.processEvents()
+            QTest.qWait(20)
+            if time.monotonic() > deadline:
+                self.fail(f"Folder listing did not reach {count} images: {self.controller.imageFolder['images']}")
+        self.settle()
+        self.assertEqual(self.control("imageList").property("count"), count)
+
+    def test_watched_folder_lists_added_and_removed_images_in_place(self):
+        from PIL import Image
+
+        folder = self.root / "watched"
+        folder.mkdir()
+        for i in range(30):
+            Image.new("RGB", (8, 8), "#95a78d").save(folder / f"{i:02}.png")
+        self.choose_folder(folder, 30)
+        self.window.setHeight(600)
+        self.app.processEvents()
+        images = self.control("imageList")
+        images.setProperty("contentY", 300)
+        self.app.processEvents()
+        Image.new("RGB", (8, 8), "#123456").save(folder / "zz-new.png")
+        (folder / "notes.txt").write_text("ignored")
+        self.wait_for_images(31)
+        self.assertEqual(images.property("contentY"), 300)
+        (folder / "00.png").unlink()
+        self.wait_for_images(30)
+        self.assertNotIn(str(folder / "00.png"), [i["filePath"] for i in self.controller.imageFolder["images"]])
+        self.controller.setRecursive(True)
+        self.settle()
+        nested = folder / "nested"
+        nested.mkdir()
+        self.settle()
+        Image.new("RGB", (8, 8), "#654321").save(nested / "deep.png")
+        self.wait_for_images(31)
+        self.assertFalse(self.controller.state["error"])
+        self.assertFalse(self.paths.state.exists())
+        self.controller.shutdown()
+        self.assertIsNone(self.controller.watcher)
+
     def test_folder_images_stay_visible_and_selection_respects_wallpaper_opt_out(self):
         from PIL import Image
 

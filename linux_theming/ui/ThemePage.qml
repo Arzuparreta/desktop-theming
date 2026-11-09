@@ -42,6 +42,16 @@ Item {
         const home = controller.homePath
         return home && path && (path === home || path.startsWith(home + "/")) ? "~" + path.slice(home.length) : path
     }
+    // A watched folder that gains or loses images keeps the reader's place.
+    property real keptContentY: 0
+    property bool keepScroll: false
+    function restoreScroll() {
+        for (let i = 0; i < images.count; ++i) {
+            if (folder.images[i].filePath === s.profile.wallpaper) { images.currentIndex = i; break }
+        }
+        images.contentY = Math.max(images.originY, Math.min(page.keptContentY, images.originY + images.contentHeight - images.height))
+        page.keepScroll = false
+    }
     function syncSelection() {
         for (let i = 0; i < images.count; ++i) {
             if (folder.images[i].filePath === s.profile.wallpaper) {
@@ -53,7 +63,8 @@ Item {
     }
     Connections {
         target: page.controller
-        function onFolderChanged() { Qt.callLater(page.syncSelection) }
+        function onFolderRefreshing() { page.keptContentY = images.contentY; page.keepScroll = true }
+        function onFolderChanged() { Qt.callLater(page.keepScroll ? page.restoreScroll : page.syncSelection) }
         function onChanged() {
             if (page.lastCandidate !== page.s.profile.wallpaper) {
                 page.lastCandidate = page.s.profile.wallpaper

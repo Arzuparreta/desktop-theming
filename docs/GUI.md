@@ -54,6 +54,11 @@ when alternatives exist. Previewing never applies. Optional **Subfolders**
 browsing skips hidden entries and does not follow linked folders recursively.
 Listing is bounded to 5,000 images, 50,000 entries and 2,048 folders; an
 incomplete library is labelled. Choosing a different folder refreshes it.
+The listed folder, and its listed subfolders when **Subfolders** is on, is
+watched through inotify (Qt `QFileSystemWatcher`), so there is no polling while
+nothing changes. Images added, renamed or removed appear about half a second
+after the last change, keeping the scroll position and the selection; the list
+is replaced only when its contents differ. Watching only reads directory entries.
 
 The right side shows the result: the image in a 16:9 desktop-shaped frame with a
 sample bar and terminal painted in the previewed palette, then **Dark/Light** and

@@ -5,7 +5,18 @@ import os
 import random
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
+import shiboken6
+from PySide6.QtCore import (
+    Property,
+    QFileSystemWatcher,
+    QObject,
+    QRunnable,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QGuiApplication
 
 from . import (
@@ -43,6 +54,9 @@ class Work(QRunnable):
 class Controller(QObject):
     changed = Signal()
     folderChanged = Signal()
+    # Emitted just before a watched folder's listing is replaced in place, so the
+    # list can keep its scroll position instead of jumping to the selection.
+    folderRefreshing = Signal()
 
     def __init__(self, paths=None):
         super().__init__()
@@ -79,6 +93,14 @@ class Controller(QObject):
         self.timer.setSingleShot(True)
         self.timer.setInterval(60)
         self.timer.timeout.connect(self.preview)
+        # Created with the first listed folder; inotify-backed on Linux, so a quiet
+        # folder costs no polling.
+        self.watcher = None
+        # Copies and downloads produce bursts of events; list once they settle.
+        self.rescan_timer = QTimer(self)
+        self.rescan_timer.setSingleShot(True)
+        self.rescan_timer.setInterval(500)
+        self.rescan_timer.timeout.connect(self.rescan_folder)
 
     @Property("QVariantMap", notify=changed)
     def state(self):
@@ -89,6 +111,7 @@ class Controller(QObject):
         # A separate notification keeps the list and scroll position stable while
         # selecting images, generating palettes or refreshing desktop discovery.
         result = dict(self._folder)
+        result.pop("directories", None)
         result["images"] = library.filtered(self._folder["images"], self._search)
         result["query"] = self._search
         return result
@@ -160,7 +183,8 @@ class Controller(QObject):
 
     @property
     def idle(self):
-        return not (self._state["busy"] or self._state["previewing"] or self._reads or self.timer.isActive())
+        return not (self._state["busy"] or self._state["previewing"] or self._reads
+                    or self.timer.isActive() or self.rescan_timer.isActive())
 
     def problem(self, context, detail):
         if "migration" in detail.lower():
@@ -354,6 +378,7 @@ class Controller(QObject):
             if revision == self._folder_revision:
                 self._folder = result
                 self.folderChanged.emit()
+                self.watch(result["directories"])
                 if remember:
                     self.remember("folder", result["path"])
             if self._next_folder is not None:
@@ -365,6 +390,53 @@ class Controller(QObject):
                 self.load_folder()
         self.read("folderLoading", lambda: library.scan(local, recursive=recursive,
                   cancelled=lambda: revision != self._folder_revision or self._closing), complete, failed)
+
+    def watch(self, directories):
+        wanted = set(directories)
+        if self.watcher is None:
+            if not wanted:
+                return
+            self.watcher = QFileSystemWatcher(self)
+            self.watcher.directoryChanged.connect(self.folderTouched)
+        watched = set(self.watcher.directories())
+        if watched - wanted:
+            self.watcher.removePaths(list(watched - wanted))
+        if wanted - watched:
+            self.watcher.addPaths(list(wanted - watched))
+
+    @Slot(str)
+    def folderTouched(self, _path):
+        if not self._closing:
+            self.rescan_timer.start()
+
+    def rescan_folder(self):
+        folder = self._folder
+        if self._closing or not folder["path"]:
+            return
+        if "folderLoading" in self._reads or "folderRefreshing" in self._reads:
+            self.rescan_timer.start()
+            return
+        revision = self._folder_revision
+
+        def current():
+            return revision == self._folder_revision and not self._closing
+
+        def complete(result):
+            if not current():
+                return
+            self.watch(result["directories"])
+            if (result["images"], result["limited"]) == (folder["images"], folder["limited"]):
+                return
+            self.folderRefreshing.emit()
+            self._folder = result
+            self.folderChanged.emit()
+
+        def failed(error):
+            if current():
+                self.watch([])
+                self.publish(notice=f"{folder['path']} can no longer be read. The list shows its last contents.")
+        self.read("folderRefreshing", lambda: library.scan(folder["path"], recursive=folder["recursive"],
+                  cancelled=lambda: not current()), complete, failed)
 
     @Slot(str)
     def searchImages(self, text):
@@ -676,6 +748,13 @@ class Controller(QObject):
 
     def shutdown(self):
         self._closing = True
+        self.rescan_timer.stop()
+        if self.watcher is not None:
+            # Destroy it now: left to garbage collection, PySide can free it
+            # twice and corrupt the heap.
+            self.watcher.directoryChanged.disconnect(self.folderTouched)
+            shiboken6.delete(self.watcher)
+            self.watcher = None
         self.invalidate_preview()
         self.pool.waitForDone()
         self.preview_pool.waitForDone()

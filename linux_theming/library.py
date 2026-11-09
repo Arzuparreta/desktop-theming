@@ -11,7 +11,7 @@ MAX_DIRECTORIES = 2048
 
 def scan(folder, *, recursive=False, cancelled=lambda: False):
     root = Path(folder).absolute()
-    images, pending = [], [root]
+    images, pending, visited = [], [root], []
     entries = directories = 0
     limited = False
     while pending and not cancelled():
@@ -23,6 +23,7 @@ def scan(folder, *, recursive=False, cancelled=lambda: False):
         # A missing/unmounted root must be an error, not an empty replacement.
         try:
             with os.scandir(current) as listing:
+                visited.append(str(current))
                 for item in listing:
                     if cancelled():
                         break
@@ -48,7 +49,7 @@ def scan(folder, *, recursive=False, cancelled=lambda: False):
             break
     images.sort(key=lambda image: (image["relativePath"].casefold(), image["relativePath"]))
     return {"path": str(root), "images": images, "total": len(images),
-            "recursive": recursive, "limited": limited}
+            "recursive": recursive, "limited": limited, "directories": visited}
 
 
 def filtered(images, query):
