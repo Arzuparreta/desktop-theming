@@ -41,7 +41,7 @@ Enlightenment and other services without implemented read/restore protocols
 remain unsupported. In Sway, an already running swww/awww can
 be used. The application does not replace an existing swaybg process or launch
 an alternative. Missing support blocks the requested wallpaper change with an
-explanation; terminal colors can still be applied by unchecking the choice.
+explanation; terminal colors can still be applied by switching off **Desktop wallpaper**.
 
 ## Review, failure and restoration
 

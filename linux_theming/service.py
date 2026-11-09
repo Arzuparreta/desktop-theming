@@ -204,7 +204,7 @@ def make_plan(paths, profile, *, which=None):
         detected = wallpaper.detect(paths, profile["wallpaper"], which=which)
         if not detected["available"]:
             raise ValueError("Cannot change desktop wallpaper: " + "; ".join(detected["reasons"]) +
-                             " Disable 'Set as desktop wallpaper' to apply colors only.")
+                             " Switch off 'Desktop wallpaper' on the Theme page to apply colors only.")
         wallpaper_action = detected["action"]
         if wallpaper_action["before"] == wallpaper_action["after"]:
             wallpaper_action = None

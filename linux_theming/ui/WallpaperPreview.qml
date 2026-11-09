@@ -3,27 +3,28 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A desktop-shaped preview: the selected image with sample windows painted in
-// the previewed palette. Fit/Fill and the sample windows affect only this view.
+// the previewed palette. The 16:9 frame fills the width it is given, up to
+// maximumFrameHeight (then it is centered). Fit/Fill and the sample windows,
+// in the row below, affect only this view.
 ColumnLayout {
     id: preview
     property url source
-    property real availableHeight: 600
     property bool fill: true
     property bool samples: true
     property bool busy: false
     property var special: ({ background: "#14171c", foreground: "#d6dae1", cursor: "#cad8cb" })
     property var colors: ({})
-    property real minimumCanvasHeight: 160
+    property real maximumFrameHeight: 100000
     property string objectPrefix: "wallpaperPreview"
-    spacing: 8
+    // Height of everything below the frame.
+    readonly property real controlsHeight: viewOptions.implicitHeight + spacing
+    spacing: 4
 
     function tone(index, fallback) { return preview.colors["color" + index] || fallback }
 
     Item {
         Layout.fillWidth: true
-        // Keep a desktop-shaped canvas without letting a wide/short window
-        // push all the controls away. The surrounding ScrollView handles overflow.
-        implicitHeight: Math.min(width * 9 / 16, Math.max(preview.minimumCanvasHeight, preview.availableHeight * 0.58))
+        implicitHeight: Math.min(width * 9 / 16, preview.maximumFrameHeight)
         Rectangle {
             id: frame
             objectName: preview.objectPrefix + "Frame"
@@ -31,7 +32,6 @@ ColumnLayout {
             width: Math.min(parent.width, parent.height * 16 / 9)
             height: width * 9 / 16
             color: Theme.canvas
-            radius: Theme.radius
             clip: true
             readonly property real unit: height / 100
             Image {
@@ -131,16 +131,17 @@ ColumnLayout {
                 x: frame.width * 0.38
                 y: bar.height + frame.height * 0.045
                 width: frame.width * 0.56
-                // End above the view options in the bottom corner.
-                height: Math.min(frame.height * 0.7, frame.height - y - 48)
+                // Sample text stays near the app's own size on large frames;
+                // the window then ends below its last line.
+                height: Math.min(frame.height * 0.7, titleBar.height + lines.implicitHeight + fontSize * 1.2)
                 radius: Math.max(3, frame.unit * 1.4)
                 color: preview.special.background
                 border.color: preview.tone(8, "#555761")
                 border.width: 1
                 clip: true
-                readonly property real fontSize: Math.max(9, frame.unit * 4.2)
+                readonly property real fontSize: Math.min(14, Math.max(9, frame.unit * 4.2))
                 // Small previews show fewer sample lines instead of unreadable text.
-                readonly property bool compact: height < fontSize * 15.5
+                readonly property bool compact: frame.height * 0.7 < fontSize * 15.5
                 Rectangle {
                     id: titleBar
                     width: parent.width
@@ -173,6 +174,7 @@ ColumnLayout {
                     }
                 }
                 Column {
+                    id: lines
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: titleBar.bottom
@@ -209,65 +211,62 @@ ColumnLayout {
                     }
                 }
             }
-
+            // Round the preview's corners like the cards below: the frame clips
+            // to a rectangle, so paint the page color outside the radius.
             Rectangle {
-                visible: preview.busy
-                anchors.left: parent.left
-                anchors.bottom: parent.bottom
-                anchors.margins: 8
-                width: busyRow.implicitWidth + 16
-                height: 26
-                radius: 13
-                color: "#d9121418"
-                Row {
-                    id: busyRow
-                    anchors.centerIn: parent
-                    spacing: 6
-                    BusyIndicator { width: 16; height: 16; running: preview.busy; anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: "Building palette…"; color: Theme.text; font.pixelSize: Theme.caption; anchors.verticalCenter: parent.verticalCenter }
-                }
+                anchors.fill: parent
+                anchors.margins: -Theme.radius
+                radius: Theme.radius * 2
+                color: "transparent"
+                border.width: Theme.radius
+                border.color: Theme.window
             }
+        }
+    }
 
-            // View options for this preview only.
-            Rectangle {
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 8
-                width: viewRow.implicitWidth + 8
-                height: viewRow.implicitHeight + 8
-                radius: Theme.radius
-                color: "#e6121418"
-                border.color: Theme.border
-                RowLayout {
-                    id: viewRow
-                    anchors.centerIn: parent
-                    spacing: 4
-                    Command {
-                        objectName: preview.objectPrefix + "Samples"
-                        compact: true
-                        quiet: !checked
-                        checkable: true
-                        checked: preview.samples
-                        iconName: "terminal"
-                        implicitWidth: 30
-                        implicitHeight: 28
-                        Accessible.name: checked ? "Hide sample windows" : "Show sample windows"
-                        Accessible.description: "Only affects this preview"
-                        onClicked: preview.samples = !preview.samples
-                    }
-                    Segmented {
-                        visible: !!preview.source.toString()
-                        implicitHeight: 28
-                        accessibleName: "Preview framing"
-                        current: preview.fill ? "fill" : "fit"
-                        options: [
-                            { value: "fit", label: "Fit", objectName: preview.objectPrefix + "Fit", description: "Show the entire image; only affects this preview" },
-                            { value: "fill", label: "Fill", objectName: preview.objectPrefix + "Fill", description: "Fill the preview with a centered crop; only affects this preview" }
-                        ]
-                        onPicked: function(value) { preview.fill = value === "fill" }
-                    }
-                }
-            }
+    // View options for this preview only, kept off the image.
+    RowLayout {
+        id: viewOptions
+        Layout.fillWidth: true
+        spacing: 6
+        BusyIndicator {
+            visible: preview.busy
+            running: preview.busy
+            implicitWidth: 18
+            implicitHeight: 18
+        }
+        Text {
+            visible: preview.busy
+            text: "Building palette…"
+            color: Theme.textMuted
+            font.pixelSize: Theme.caption
+        }
+        Item { Layout.fillWidth: true; implicitHeight: 28 }
+        Text {
+            text: "Preview only:"
+            color: Theme.textFaint
+            font.pixelSize: Theme.caption
+            rightPadding: 4
+            Accessible.ignored: true
+        }
+        Choice {
+            objectName: preview.objectPrefix + "Samples"
+            text: "Sample windows"
+            checked: preview.samples
+            font.pixelSize: Theme.caption
+            Accessible.description: "Show a sample bar and terminal in the palette. Only affects this preview"
+            onClicked: preview.samples = checked
+        }
+        Segmented {
+            visible: !!preview.source.toString()
+            implicitHeight: 28
+            accessibleName: "Preview framing"
+            current: preview.fill ? "fill" : "fit"
+            options: [
+                { value: "fit", label: "Fit", objectName: preview.objectPrefix + "Fit", description: "Show the entire image; only affects this preview" },
+                { value: "fill", label: "Fill", objectName: preview.objectPrefix + "Fill", description: "Fill the preview with a centered crop; only affects this preview" }
+            ]
+            onPicked: function(value) { preview.fill = value === "fill" }
         }
     }
 }

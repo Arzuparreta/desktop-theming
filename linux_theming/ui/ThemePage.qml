@@ -30,9 +30,18 @@ Item {
             controller.chooseWallpaper(folder.images[0].fileUrl)
         }
     }
-    readonly property int nextStep: !s.profile.wallpaper ? 0 : !s.profile.components.length ? 1 : 2
+    // The sixteen terminal colors stay folded into one row until asked for.
+    property bool paletteOpen: false
     readonly property var addedApps: s.profile.components.filter(id => s.applied.components.indexOf(id) < 0)
     readonly property var removedApps: s.hasApplied ? s.applied.components.filter(id => s.profile.components.indexOf(id) < 0) : []
+    // Show the opened palette down to its actions, and from its row when both fit.
+    function revealPalette() {
+        const flick = settings.contentItem
+        const top = paletteToggle.mapToItem(flick.contentItem, 0, 0).y - 1
+        const bottom = paletteDetails.mapToItem(flick.contentItem, 0, paletteDetails.height).y + 2
+        const wanted = bottom - top <= flick.height ? Math.min(top, Math.max(flick.contentY, bottom - flick.height)) : bottom - flick.height
+        flick.contentY = Math.max(0, Math.min(wanted, flick.contentHeight - flick.height))
+    }
     function fileName(path) { return path ? path.split("/").pop() : "" }
     function componentName(id) {
         const item = s.overview.components.find(c => c.id === id)
@@ -325,300 +334,352 @@ Item {
             }
         }
 
-        // Preview and options
+        // Preview and options: the preview keeps its place and size; the
+        // settings below it scroll when the window is too short for them.
         Item {
+            id: previewColumn
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumWidth: 320
+            readonly property bool sideBySide: width >= 600
+            // Settings height kept in view below the preview, with the palette
+            // folded: both groups side by side, or the Palette group when stacked.
+            readonly property real settingsHeight: Math.max(paletteGroup.implicitHeight - (page.paletteOpen ? paletteDetails.implicitHeight : 0),
+                                                            sideBySide ? applyGroup.implicitHeight : 0)
+
+            WallpaperPreview {
+                id: wallpaperPreview
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                source: page.s.wallpaperUrl
+                special: page.preview.special || ({ background: "#14171c", foreground: "#d6dae1", cursor: "#cad8cb" })
+                colors: page.preview.colors || ({})
+                busy: page.s.previewing
+                // The frame uses the full width unless that would push the settings
+                // out of view; very large windows keep it below 70% of the height.
+                maximumFrameHeight: Math.max(180, Math.min(previewColumn.height * 0.7,
+                    previewColumn.height - controlsHeight - settings.anchors.topMargin - previewColumn.settingsHeight))
+            }
+
             ScrollView {
-                id: previewScroll
+                id: settings
                 objectName: "appearanceScroll"
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: wallpaperPreview.bottom
+                anchors.bottom: parent.bottom
+                anchors.topMargin: 8
+                // The scroll bar sits in the page margin, so the settings' right
+                // edge lines up with the preview, the header and the status bar.
+                anchors.rightMargin: -14
                 contentWidth: availableWidth
                 clip: true
                 ScrollBar.vertical.policy: contentHeight > height + 1 ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                 Item {
-                    width: previewScroll.availableWidth
-                    implicitHeight: column.implicitHeight
-                    ColumnLayout {
-                        id: column
-                        // Keep the controls aligned with the desktop-shaped preview on wide windows.
+                    width: settings.availableWidth
+                    implicitHeight: groups.implicitHeight
+                    GridLayout {
+                        id: groups
                         width: parent.width - 14
-                        spacing: 14
+                        columns: previewColumn.sideBySide ? 2 : 1
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        readonly property real cellWidth: columns === 2 ? (width - columnSpacing) / 2 : width
 
-                        // First use: the three steps, with the next one marked.
-                        Rectangle {
-                            visible: !page.s.hasApplied
-                            Layout.fillWidth: true
-                            implicitHeight: steps.implicitHeight + 20
-                            radius: Theme.radius
-                            color: Theme.surface
-                            border.color: Theme.border
-                            Flow {
-                                id: steps
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                spacing: 14
-                                Repeater {
-                                    model: [
-                                        { label: "Choose an image", done: !!page.s.profile.wallpaper },
-                                        { label: "Choose applications", done: page.s.profile.components.length > 0 },
-                                        { label: "Review and apply", done: false }
-                                    ]
-                                    Row {
-                                        required property var modelData
-                                        required property int index
-                                        spacing: 7
-                                        readonly property bool next: index === page.nextStep
-                                        Rectangle {
-                                            width: 20
-                                            height: 20
-                                            radius: 10
-                                            color: modelData.done ? Theme.accent : "transparent"
-                                            border.width: modelData.done ? 0 : parent.next ? 2 : 1
-                                            border.color: parent.next ? Theme.accent : Theme.borderStrong
-                                            Icon { anchors.centerIn: parent; visible: modelData.done; name: "check"; size: 13; color: Theme.accentInk }
-                                            Text { anchors.centerIn: parent; visible: !modelData.done; text: index + 1; color: parent.parent.next ? Theme.accent : Theme.textMuted; font.pixelSize: Theme.caption; font.weight: Font.DemiBold }
-                                        }
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: modelData.label
-                                            color: modelData.done ? Theme.textMuted : parent.next ? Theme.text : Theme.textMuted
-                                            font.pixelSize: Theme.body
-                                            font.weight: parent.next ? Font.DemiBold : Font.Normal
-                                        }
+                            SettingsGroup {
+                                id: paletteGroup
+                                Layout.preferredWidth: groups.cellWidth
+                                title: "Palette"
+                                SettingRow {
+                                    divider: false
+                                    title: "Mode"
+                                    Segmented {
+                                        implicitHeight: 28
+                                        Layout.preferredWidth: sourceChoice.implicitWidth
+                                        accessibleName: "Background mode"
+                                        interactive: !page.s.busy && page.s.loaded
+                                        current: page.s.profile.polarity
+                                        options: [
+                                            { value: "dark", label: "Dark", objectName: "polarity-dark", description: "Dark backgrounds · Alt+D" },
+                                            { value: "light", label: "Light", objectName: "polarity-light", description: "Light backgrounds · Alt+D" }
+                                        ]
+                                        onPicked: function(value) { page.controller.setOption("polarity", value) }
                                     }
                                 }
-                            }
-                            Accessible.role: Accessible.StaticText
-                            Accessible.name: "Steps: choose an image, choose applications, review and apply"
-                        }
-
-                        WallpaperPreview {
-                            id: wallpaperPreview
-                            Layout.fillWidth: true
-                            source: page.s.wallpaperUrl
-                            special: page.preview.special || ({ background: "#14171c", foreground: "#d6dae1", cursor: "#cad8cb" })
-                            colors: page.preview.colors || ({})
-                            busy: page.s.previewing
-                            minimumCanvasHeight: 170
-                            // Leave room for the options and "When you apply" without scrolling.
-                            availableHeight: previewScroll.availableHeight * 0.76
-                        }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Segmented {
-                                accessibleName: "Background mode"
-                                interactive: !page.s.busy && page.s.loaded
-                                current: page.s.profile.polarity
-                                options: [
-                                    { value: "dark", label: "Dark", icon: "moon", objectName: "polarity-dark", description: "Dark backgrounds · Alt+D" },
-                                    { value: "light", label: "Light", icon: "sun", objectName: "polarity-light", description: "Light backgrounds · Alt+D" }
-                                ]
-                                onPicked: function(value) { page.controller.setOption("polarity", value) }
-                            }
-                            Segmented {
-                                accessibleName: "Color source"
-                                interactive: !page.s.busy && page.s.loaded
-                                current: page.s.profile.wallpaper ? page.s.profile.mode : "safe"
-                                options: [
-                                    { value: "adaptive", label: "From image", objectName: "mode-adaptive", enabled: !!page.s.profile.wallpaper, description: "Derive the palette from the image · Alt+M" },
-                                    { value: "safe", label: "Default colors", objectName: "mode-safe", description: "Use the built-in accessible palette · Alt+M" }
-                                ]
-                                onPicked: function(value) { page.controller.setOption("mode", value) }
-                            }
-                        }
-
-                        // Palette
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: 760
-                            spacing: 6
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: 9
-                                columnSpacing: 4
-                                rowSpacing: 4
-                                opacity: page.s.previewing ? 0.55 : 1
-                                Behavior on opacity { NumberAnimation { duration: 120 } }
-                                Repeater {
-                                    model: page.narrow ? ["", "blk", "red", "grn", "yel", "blu", "mag", "cyn", "wht"] : ["", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
-                                    Text {
-                                        required property string modelData
-                                        Layout.fillWidth: !!modelData
-                                        Layout.preferredWidth: modelData ? 10 : 46
-                                        text: modelData
-                                        color: Theme.textFaint
-                                        font.pixelSize: 11
-                                        elide: Text.ElideRight
-                                        Accessible.ignored: true
-                                    }
-                                }
-                                Repeater {
-                                    model: 18
-                                    Item {
-                                        id: cell
-                                        required property int index
-                                        readonly property bool label: index % 9 === 0
-                                        readonly property int colorIndex: index < 9 ? index - 1 : index - 2
-                                        readonly property color swatch: (page.preview.colors || ({}))["color" + colorIndex] || Theme.raised
-                                        Layout.fillWidth: !label
-                                        Layout.preferredWidth: label ? 46 : 10
-                                        implicitHeight: 22
-                                        Text {
-                                            visible: cell.label
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: cell.index === 0 ? "Normal" : "Bright"
-                                            color: Theme.textFaint
-                                            font.pixelSize: Theme.caption
-                                        }
-                                        Rectangle {
-                                            visible: !cell.label
-                                            anchors.fill: parent
-                                            radius: 4
-                                            color: cell.swatch
-                                            border.width: 1
-                                            border.color: Qt.rgba(1, 1, 1, 0.08)
-                                            Accessible.role: Accessible.Graphic
-                                            readonly property string role: ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"][cell.colorIndex % 8] + (cell.colorIndex >= 8 ? ", bright" : "")
-                                            Accessible.name: "Color " + cell.colorIndex + ", " + role + ": " + cell.swatch + ". Copy"
-                                            property bool copied: false
-                                            Timer { id: copiedTimer; interval: 1200; onTriggered: parent.copied = false }
-                                            HoverHandler { id: swatchHover; cursorShape: Qt.PointingHandCursor }
-                                            TapHandler { onTapped: { page.controller.copyText(cell.swatch.toString()); parent.copied = true; copiedTimer.restart() } }
-                                            ToolTip.visible: swatchHover.hovered || copied
-                                            ToolTip.text: copied ? "Copied " + cell.swatch : role.charAt(0).toUpperCase() + role.slice(1) + " (color " + cell.colorIndex + ") · " + cell.swatch + " · click to copy"
-                                            ToolTip.delay: 300
-                                        }
-                                    }
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Body {
-                                    objectName: "effectivePalette"
-                                    Layout.fillWidth: true
+                                SettingRow {
+                                    // Only explain the palette when it differs from what was asked.
                                     readonly property bool fallback: !!page.preview.effective && page.s.profile.mode === "adaptive" && page.preview.effective === "safe" && !!page.s.profile.wallpaper
-                                    text: fallback ? "Using default colors: " + (page.preview.reason || "this image's colors do not have enough contrast.")
-                                        : !page.s.profile.wallpaper ? "Default colors are used until you choose an image."
-                                        : page.preview.reason || "Colors are checked for terminal contrast."
-                                    color: fallback ? Theme.warning : Theme.textFaint
-                                    font.pixelSize: Theme.caption
+                                    title: "Source"
+                                    captionBelow: true
+                                    caption: fallback ? "Using default colors: " + (page.preview.reason || "this image's colors do not have enough contrast.")
+                                        : !page.s.profile.wallpaper ? "Default colors until you choose an image." : ""
+                                    captionColor: fallback ? Theme.warning : Theme.textFaint
+                                    captionItem.objectName: "effectivePalette"
+                                    Segmented {
+                                        id: sourceChoice
+                                        implicitHeight: 28
+                                        accessibleName: "Color source"
+                                        interactive: !page.s.busy && page.s.loaded
+                                        current: page.s.profile.wallpaper ? page.s.profile.mode : "safe"
+                                        options: [
+                                            { value: "adaptive", label: "From image", objectName: "mode-adaptive", enabled: !!page.s.profile.wallpaper, description: "Derive the palette from the image · Alt+M" },
+                                            { value: "safe", label: "Default colors", objectName: "mode-safe", description: "Use the built-in accessible palette · Alt+M" }
+                                        ]
+                                        onPicked: function(value) { page.controller.setOption("mode", value) }
+                                    }
                                 }
-                                Command {
-                                    objectName: "exportTheme"
-                                    compact: true
-                                    quiet: true
-                                    iconName: "export"
-                                    text: "Export file…"
-                                    enabled: !page.s.busy && !!page.preview.special
-                                    Accessible.description: "Save a theme file for your own configuration. Does not connect an application."
-                                    onClicked: page.exportRequested()
-                                }
-                            }
-                        }
-
-                        // What applying affects
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: effects.implicitHeight + 24
-                            radius: Theme.radiusLarge
-                            color: Theme.surface
-                            border.color: page.s.profile.components.length ? Theme.border : Theme.infoBorder
-                            ColumnLayout {
-                                id: effects
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: 12
-                                spacing: 8
-                                Text {
-                                    text: "When you apply"
-                                    color: Theme.textFaint
-                                    font.pixelSize: Theme.caption
-                                    font.weight: Font.DemiBold
-                                    font.capitalization: Font.AllUppercase
-                                    font.letterSpacing: 0.6
-                                }
-                                RowLayout {
+                                AbstractButton {
+                                    id: paletteToggle
+                                    objectName: "paletteToggle"
                                     Layout.fillWidth: true
-                                    spacing: 10
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 6
+                                    Layout.fillHeight: true
+                                    implicitHeight: 40
+                                    checkable: true
+                                    checked: page.paletteOpen
+                                    hoverEnabled: true
+                                    activeFocusOnTab: true
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: (checked ? "Hide" : "Show") + " the sixteen terminal colors"
+                                    onClicked: {
+                                        page.paletteOpen = !page.paletteOpen
+                                        if (page.paletteOpen) revealTimer.restart()
+                                    }
+                                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                    background: Rectangle {
+                                        color: paletteToggle.hovered ? Theme.raised : "transparent"
+                                        radius: Theme.radius - 1
+                                        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 14; height: 1; color: Theme.border }
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            anchors.margins: 2
+                                            radius: Theme.radiusSmall
+                                            color: "transparent"
+                                            border.width: 2
+                                            border.color: Theme.focus
+                                            visible: paletteToggle.visualFocus
+                                        }
+                                    }
+                                    contentItem: RowLayout {
+                                        spacing: 12
                                         Text {
+                                            Layout.leftMargin: 14
                                             Layout.fillWidth: true
-                                            text: page.s.profile.components.length ? "The palette is used in these applications"
-                                                : page.removedApps.length ? "No application will use the palette" : "No applications chosen yet"
+                                            text: "Terminal colors"
                                             color: Theme.text
                                             font.pixelSize: Theme.body
-                                            wrapMode: Text.Wrap
+                                            elide: Text.ElideRight
                                         }
-                                        Flow {
-                                            Layout.fillWidth: true
-                                            visible: page.s.profile.components.length > 0 || page.removedApps.length > 0
-                                            spacing: 6
+                                        // Normal colors above bright ones, as in the full grid.
+                                        Grid {
+                                            visible: !page.paletteOpen
+                                            columns: 8
+                                            spacing: 2
+                                            opacity: page.s.previewing ? 0.55 : 1
                                             Repeater {
-                                                model: page.s.profile.components
-                                                Chip {
+                                                model: 16
+                                                Rectangle {
+                                                    required property int index
+                                                    width: 13
+                                                    height: 10
+                                                    radius: 2
+                                                    color: (page.preview.colors || ({}))["color" + index] || Theme.raised
+                                                    border.width: 1
+                                                    border.color: Qt.rgba(1, 1, 1, 0.14)
+                                                }
+                                            }
+                                        }
+                                        Icon {
+                                            Layout.rightMargin: 12
+                                            name: "chevron-down"
+                                            rotation: page.paletteOpen ? 180 : 0
+                                            size: 16
+                                            color: Theme.textMuted
+                                        }
+                                    }
+                                }
+                                                            // The opened palette, directly under its row, with full color
+                                    // names when the card is wide enough.
+                                    Item {
+                                        id: paletteDetails
+                                        objectName: "paletteDetails"
+                                        visible: page.paletteOpen
+                                        Layout.fillWidth: true
+                                        implicitHeight: paletteContent.implicitHeight + 14
+                                        ColumnLayout {
+                                        id: paletteContent
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.leftMargin: 14
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: 9
+                                            columnSpacing: 4
+                                            rowSpacing: 4
+                                            opacity: page.s.previewing ? 0.55 : 1
+                                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                                            Repeater {
+                                                // Full names, centered over each column, overflow into the short
+                                            // neighbouring names; very narrow cards use abbreviations.
+                                            model: (paletteDetails.width - 102) / 8 < 36 ? ["", "blk", "red", "grn", "yel", "blu", "mag", "cyn", "wht"] : ["", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
+                                                Text {
                                                     required property string modelData
-                                                    readonly property bool added: page.s.hasApplied && page.addedApps.indexOf(modelData) >= 0
-                                                    text: page.componentName(modelData) + (added ? " · new" : "")
-                                                    tone: added ? "warning" : "neutral"
+                                                    Layout.fillWidth: !!modelData
+                                                    Layout.preferredWidth: modelData ? 10 : 46
+                                                    text: modelData
+                                                    color: Theme.textFaint
+                                                    font.pixelSize: 11
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    Accessible.ignored: true
                                                 }
                                             }
                                             Repeater {
-                                                model: page.removedApps
-                                                Chip { required property string modelData; text: page.componentName(modelData) + " · previous colors restored"; tone: "faint" }
+                                                model: 18
+                                                Item {
+                                                    id: cell
+                                                    required property int index
+                                                    readonly property bool label: index % 9 === 0
+                                                    readonly property int colorIndex: index < 9 ? index - 1 : index - 2
+                                                    readonly property color swatch: (page.preview.colors || ({}))["color" + colorIndex] || Theme.raised
+                                                    Layout.fillWidth: !label
+                                                    Layout.preferredWidth: label ? 46 : 10
+                                                    implicitHeight: 24
+                                                    Text {
+                                                        visible: cell.label
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        text: cell.index === 0 ? "Normal" : "Bright"
+                                                        color: Theme.textFaint
+                                                        font.pixelSize: Theme.caption
+                                                    }
+                                                    Rectangle {
+                                                        visible: !cell.label
+                                                        anchors.fill: parent
+                                                        radius: 4
+                                                        color: cell.swatch
+                                                        border.width: 1
+                                                        border.color: Qt.rgba(1, 1, 1, 0.14)
+                                                        Accessible.role: Accessible.Graphic
+                                                        readonly property string role: ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"][cell.colorIndex % 8] + (cell.colorIndex >= 8 ? ", bright" : "")
+                                                        Accessible.name: "Color " + cell.colorIndex + ", " + role + ": " + cell.swatch + ". Copy"
+                                                        property bool copied: false
+                                                        Timer { id: copiedTimer; interval: 1200; onTriggered: parent.copied = false }
+                                                        HoverHandler { id: swatchHover; cursorShape: Qt.PointingHandCursor }
+                                                        TapHandler { onTapped: { page.controller.copyText(cell.swatch.toString()); parent.copied = true; copiedTimer.restart() } }
+                                                        ToolTip.visible: swatchHover.hovered || copied
+                                                        ToolTip.text: copied ? "Copied " + cell.swatch : role.charAt(0).toUpperCase() + role.slice(1) + " (color " + cell.colorIndex + ") · " + cell.swatch
+                                                        ToolTip.delay: 300
+                                                    }
+                                                }
                                             }
                                         }
-                                        Body {
+                                        RowLayout {
                                             Layout.fillWidth: true
-                                            visible: !page.s.profile.components.length
-                                            text: "Choose terminals, bars and other applications. Everything else stays as it is."
-                                            font.pixelSize: Theme.caption + 1
+                                            spacing: 8
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: "Click a color to copy its value."
+                                                color: Theme.textFaint
+                                                font.pixelSize: Theme.caption
+                                                wrapMode: Text.Wrap
+                                            }
+                                            Command {
+                                                objectName: "exportTheme"
+                                                compact: true
+                                                quiet: true
+                                                iconName: "export"
+                                                text: "Export file…"
+                                                enabled: !page.s.busy && !!page.preview.special
+                                                Accessible.description: "Save a theme file for your own configuration. Does not connect an application."
+                                                onClicked: page.exportRequested()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            SettingsGroup {
+                                id: applyGroup
+                                Layout.preferredWidth: groups.cellWidth
+                                // Match the Palette card's height, except while the palette is open.
+                                stretch: !page.paletteOpen
+                                title: "Apply to"
+                                SettingRow {
+                                    divider: false
+                                    title: "Applications"
+                                    caption: page.s.profile.components.length || page.removedApps.length ? "" : "None chosen yet"
+                                    extra: Flow {
+                                        Layout.fillWidth: true
+                                        visible: page.s.profile.components.length > 0 || page.removedApps.length > 0
+                                        spacing: 6
+                                        Repeater {
+                                            model: page.s.profile.components
+                                            Chip {
+                                                required property string modelData
+                                                readonly property bool added: page.s.hasApplied && page.addedApps.indexOf(modelData) >= 0
+                                                text: page.componentName(modelData) + (added ? " · new" : "")
+                                                tone: added ? "warning" : "neutral"
+                                            }
+                                        }
+                                        Repeater {
+                                            model: page.removedApps
+                                            Chip { required property string modelData; text: page.componentName(modelData) + " · previous colors restored"; tone: "faint" }
                                         }
                                     }
                                     Command {
                                         objectName: "manageApplications"
-                                        Layout.alignment: Qt.AlignTop
                                         compact: true
                                         quiet: true
-                                        text: page.s.profile.components.length ? "Change…" : "Choose…"
                                         iconName: "apps"
+                                        text: page.s.profile.components.length ? "Change…" : "Choose…"
                                         Accessible.name: page.s.profile.components.length ? "Change applications" : "Choose applications"
                                         onClicked: page.applicationsRequested()
                                     }
                                 }
-                                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
-                                Toggle {
-                                    objectName: "setDesktopWallpaper"
-                                    Layout.fillWidth: true
-                                    text: "Set as desktop wallpaper"
-                                    description: !page.s.profile.wallpaper ? "Choose an image first." : page.s.profile.set_wallpaper ? "Your current background is kept for undo." : "Your current background stays as it is."
-                                    checked: !!page.s.profile.set_wallpaper
-                                    enabled: !page.s.busy && page.s.loaded && !!page.s.profile.wallpaper
-                                    onToggled: page.controller.setWallpaperEnabled(checked)
+                                SettingRow {
+                                    id: wallpaperRow
+                                    title: "Desktop wallpaper"
+                                    caption: !page.s.profile.wallpaper ? "Choose an image first." : page.s.profile.set_wallpaper ? "Your current wallpaper is kept for undo." : "Your current wallpaper stays as it is."
+                                    Toggle {
+                                        objectName: "setDesktopWallpaper"
+                                        Layout.preferredWidth: 46
+                                        Accessible.name: "Set as desktop wallpaper"
+                                        checked: !!page.s.profile.set_wallpaper
+                                        enabled: !page.s.busy && page.s.loaded && !!page.s.profile.wallpaper
+                                        onToggled: page.controller.setWallpaperEnabled(checked)
+                                    }
                                 }
                             }
-                        }
-                        Item { implicitHeight: 4 }
                     }
                 }
             }
-            // A fade shows that the column continues below the window edge.
+            // Scroll the settings just enough to show the opened palette, once
+            // they have settled at their new height. The preview does not move.
+            Timer { id: revealTimer; interval: 80; onTriggered: page.revealPalette() }
+            Connections {
+                target: settings.contentItem
+                function onContentHeightChanged() { if (revealTimer.running) revealTimer.restart() }
+            }
+            // Fades show that the scrolled settings continue above or below.
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.rightMargin: 14
+                anchors.top: settings.top
+                height: 20
+                visible: settings.contentItem.contentY > 1
+                gradient: Gradient {
+                    GradientStop { position: 0; color: Theme.window }
+                    GradientStop { position: 1; color: "transparent" }
+                }
+            }
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 28
-                visible: previewScroll.contentItem.contentY + previewScroll.height < previewScroll.contentHeight - 4
+                visible: settings.contentItem.contentY + settings.height < settings.contentHeight - 4
                 gradient: Gradient {
                     GradientStop { position: 0; color: "transparent" }
                     GradientStop { position: 1; color: Theme.window }
