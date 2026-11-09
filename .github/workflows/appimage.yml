@@ -125,7 +125,10 @@ jobs:
           pages. The Theme page previews the image with a sample bar and terminal
           painted in the generated palette, in dark or light. A status bar shows the
           preview, the applied theme and pending application or wallpaper changes.
-          First use has a three-step guide. Review shows decisions that need
+          The preview stays fixed while settings scroll. Palette and Apply to
+          groups organize the controls; Terminal colors starts collapsed and
+          expands on request. Preview-only controls sit below the image.
+          Review shows decisions that need
           attention first, lists your files before undo records and colors diffs.
           The consent dialog names link targets and how many colors are replaced.
           Applications use switches with status chips; History shows thumbnails,
