@@ -144,7 +144,7 @@ class WallpaperTests(unittest.TestCase):
 
     def test_unsupported_session_blocks_selected_wallpaper_but_allows_colors(self):
         with patch.dict(os.environ, {'XDG_CURRENT_DESKTOP': 'sway', 'XDG_SESSION_TYPE': 'wayland'}):
-            with self.assertRaisesRegex(ValueError, 'Disable'):
+            with self.assertRaisesRegex(ValueError, "Switch off 'Desktop wallpaper'"):
                 service.make_plan(self.paths, self.profile, which=lambda _: None)
             self.profile['set_wallpaper'] = False
             self.plan()

@@ -46,7 +46,7 @@ reversible application-menu registration at its current stable path. Copy the
 command there to choose a shortcut in your desktop settings. No key binding,
 autostart or background service is installed. [Daily workflow and shortcuts](docs/GUI.md#daily-use).
 
-**Set as desktop wallpaper** is on by default for a new profile; turn it off
+**Desktop wallpaper** (under **Apply to**) is on by default for a new profile; turn it off
 to use only the image’s palette. Your choice is kept when switching images.
 Choose a folder to browse its images in a persistent list with small thumbnails.
 Review and approve to change the wallpaper. The GUI runs without a server or

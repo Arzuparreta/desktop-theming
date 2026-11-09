@@ -270,6 +270,31 @@ class GuiTests(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(self.messages, [])
 
+    def test_terminal_palette_starts_folded_and_opens_without_changing_the_draft(self):
+        details = self.control("paletteDetails")
+        self.assertFalse(details.isVisible())
+        profile = dict(self.controller.state["profile"])
+        frame = self.control("wallpaperPreviewFrame")
+        scroll = self.control("appearanceScroll")
+        top, height = frame.mapToScene(QPoint(0, 0)).y(), frame.height()
+        self.click("paletteToggle")
+        QTest.qWait(300)  # The settings scroll to the palette once their layout settles.
+        self.assertTrue(details.isVisible())
+        self.assertTrue(self.control("exportTheme").isVisible())
+        # The palette opens inside its group; only the settings scroll to show it.
+        self.assertEqual((frame.mapToScene(QPoint(0, 0)).y(), frame.height()), (top, height))
+        flick = scroll.property("contentItem")
+        bottom = details.mapToItem(flick, details.boundingRect().bottomLeft()).y()
+        self.assertLessEqual(bottom, flick.height() + 1)
+        self.click("paletteToggle")
+        self.assertFalse(details.isVisible())
+        self.assertEqual((frame.mapToScene(QPoint(0, 0)).y(), frame.height()), (top, height))
+        self.assertEqual(self.controller.state["profile"], profile)
+        self.assertEqual(
+            [p for p in self.paths.config.rglob("*") if p.is_file()
+             and p.name != "navigation.ini"], [])
+        self.assertEqual(self.messages, [])
+
     def test_daily_latest_image_wins_while_palette_is_running(self):
         from PIL import Image
 

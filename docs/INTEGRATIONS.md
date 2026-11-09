@@ -39,7 +39,7 @@ reopen it yourself.
 | zsh | Native ZLE selection/search/paste roles and optional zsh-syntax-highlighting color roles | Append guarded assignments to `~/.zshrc` or supported `$ZDOTDIR/.zshrc`. Keep prompt, bindings, plugins and aliases. No shell code is evaluated during inspection. Open a new interactive shell |
 | fish | Native syntax, autosuggestion, search, selection and pager roles | Append guarded global assignments to `fish/config.fish`; no universal-variable writes or prompt replacement. Open a new interactive shell |
 | swaybg | Image directives in `sway/config`, composed with Sway colors when both are selected | Choose **Use image** and an image. Configure the next manual Sway reload; never replace a running swaybg process. Root literal `output NAME bg IMAGE MODE` directives only. Preserve output scale/layout. This file workflow takes precedence over the live wallpaper request when selected |
-| feh / swww / awww / hyprpaper | Reviewed live wallpaper application and restoration through the compatible session adapter | Use **Set as desktop wallpaper**. No separate palette checkbox, service startup or process replacement. Protocol, restoration and session limits are in [WALLPAPER.md](WALLPAPER.md) |
+| feh / swww / awww / hyprpaper | Reviewed live wallpaper application and restoration through the compatible session adapter | Use **Desktop wallpaper** on the Theme page. No separate palette checkbox, service startup or process replacement. Protocol, restoration and session limits are in [WALLPAPER.md](WALLPAPER.md) |
 
 No inventory row is solely discovery-only in this release. Unsupported custom
 configuration syntax, missing dependencies or incompatible running sessions are

@@ -39,9 +39,9 @@ The header shows the current session, **Check desktop again** (Ctrl+R) and a
 
 After a theme has been applied, opening the app starts a **quick theme change**:
 the Theme page with the search field focused, where Escape closes the window
-without applying. First use opens the same window with a three-step guide
-(image, applications, review). `--quick` and `--center` explicitly choose either
-start. There is no resident daemon, autostart or tray requirement.
+without applying. First use opens the same window; until a theme is applied, the
+status bar leads to the next step (**Choose applications**, then **Review
+changes**). `--quick` and `--center` explicitly choose either start. There is no resident daemon, autostart or tray requirement.
 
 The Theme page lists the image library on the left: search, **Random**, a
 thumbnail list with **Applied** and **Preview** markers, the folder path and image
@@ -61,11 +61,21 @@ after the last change, keeping the scroll position and the selection; the list
 is replaced only when its contents differ. Watching only reads directory entries.
 
 The right side shows the result: the image in a 16:9 desktop-shaped frame with a
-sample bar and terminal painted in the previewed palette, then **Dark/Light** and
-**From image/Default colors**, the sixteen terminal colors (click one to copy its
-value), the effective palette explanation and **Export file…**. **When you apply**
-lists the applications that will use the palette, marking new ones and those that
-will get their previous colors back, and holds **Set as desktop wallpaper**.
+sample bar and terminal painted in the previewed palette. Below the frame,
+**Preview only:** **Sample windows** and **Fit/Fill** change only this view. Two
+groups follow, side by side when the column is wide enough and stacked otherwise:
+
+- **Palette:** **Mode** (Dark/Light), **Source** (From image/Default colors, with
+  the engine's explanation when default colors replace the image's colors) and
+  **Terminal colors**, a folded row that summarises the sixteen colors. Opening
+  it shows the full grid below both groups (click a color to copy its value) and
+  **Export file…**; the preview gets smaller to keep everything in view.
+- **Apply to:** **Applications** lists the applications that will use the
+  palette, marking new ones and those that will get their previous colors back;
+  **Desktop wallpaper** sets the image as the wallpaper when applied.
+
+The frame uses the width of the column and the height the settings leave free;
+a shorter frame is centered on a backdrop of the same width.
 
 The app labels its last applied profile separately from the preview candidate.
 A remembered image can be an unapplied candidate. **Discard** returns to the
@@ -142,8 +152,8 @@ do not establish compositor or global-shortcut compatibility.
 ## Workflows
 
 - **Theme:** choose an image as a color source, select dark/light and
-  image-derived/default colors, and inspect the sample windows and all sixteen
-  terminal colors. **Set as desktop wallpaper** is on by default for a new profile;
+  image-derived/default colors, and inspect the sample windows and, on request,
+  all sixteen terminal colors. **Desktop wallpaper** is on by default for a new profile;
   saved choices and a switched-off option are preserved when switching images.
   Choose **Single image…** for one file or **Change folder…** for a sorted,
   scrollable list of PNG, JPEG, WebP, BMP and TIFF images from the selected library.
@@ -157,7 +167,7 @@ do not establish compositor or global-shortcut compatibility.
   engine's explanation.
   The preview frame is 16:9 and follows the column width and available window
   height. **Fill** (the default) shows a centered crop as most desktops do; **Fit**
-  preserves the whole image with neutral margins. The terminal button hides or
+  preserves the whole image with neutral margins. **Sample windows** hides or
   shows the sample bar and terminal. These controls affect only the preview, not
   the desktop adapter's wallpaper placement.
   Images honor orientation metadata and decode asynchronously within a bounded
@@ -215,7 +225,7 @@ do not establish compositor or global-shortcut compatibility.
   to other settings. Edits after review and journal changes invalidate approval;
   conflicts with managed colors name the file and setting without overwriting them.
   Interrupted transactions also show a direct recovery action above the main view.
-- **Export:** open **Export file…** on the Theme page (or **⋯ → Export theme
+- **Export:** open **Export file…** under the Theme page's **Terminal colors** (or **⋯ → Export theme
   file…**), choose a native file format from the format selector, inspect the
   generated theme, copy it or save a new file. Native GNOME/Xfce preferences are
   reviewed settings, not standalone theme files. Saving refuses existing files
