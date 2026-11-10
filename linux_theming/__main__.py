@@ -100,6 +100,9 @@ def main():
     # Wayland app_id / desktop matching for the registered menu entry.
     app.setDesktopFileName("linux-theming")
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "ui/icon.svg")))
+    from .graphics import choose_renderer
+
+    choose_renderer(app)  # Before any QML window: a failed OpenGL backend aborts Qt.
     server = None
     if claimed is not None and claimed.role == "primary":
         server = instance.server_class()(claimed, app)
