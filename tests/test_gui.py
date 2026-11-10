@@ -27,6 +27,12 @@ if HAS_QT:
     from linux_theming.gui import Controller
 
 
+def webp_decoder():
+    from PySide6.QtGui import QImageReader
+
+    return b"webp" in [bytes(name) for name in QImageReader.supportedImageFormats()]
+
+
 
 @unittest.skipUnless(HAS_QT, "Install requirements-gui.txt for offscreen GUI tests")
 class GuiTests(unittest.TestCase):
@@ -45,7 +51,10 @@ class GuiTests(unittest.TestCase):
                               "XDG_STATE_HOME": str(self.paths.state),
                               "XDG_CACHE_HOME": str(self.root / "cache"),
                               "XDG_DATA_HOME": str(self.root / "data"),
-                              "XDG_RUNTIME_DIR": str(self.root / "runtime")})
+                              "XDG_RUNTIME_DIR": str(self.root / "runtime"),
+                              # Host values (for example T3CODE_HOME when run from T3 Code)
+                              # point outside the disposable HOME and are rejected.
+                              "T3CODE_HOME": "", "ZDOTDIR": ""})
         self.env.start()
         self.addCleanup(self.env.stop)
         self.which = patch("linux_theming.inventory.shutil.which", side_effect=lambda c: "/usr/bin/" + c)
@@ -1078,7 +1087,13 @@ class GuiTests(unittest.TestCase):
             [p for p in self.paths.config.rglob("*") if p.is_file()
              and p.name != "navigation.ini"], [])
         self.assertFalse(self.paths.state.exists())
-        self.assertEqual(self.messages, [])
+        messages = self.messages
+        if not webp_decoder():
+            # The file is still listed; only Qt builds without the WebP
+            # image plugin (system qt6-imageformats missing) cannot draw it.
+            messages = [m for m in messages
+                        if not (m.endswith("c.webp: Unsupported image format") and "Error decoding" in m)]
+        self.assertEqual(messages, [])
 
     def test_empty_folder_and_switching_to_another_folder(self):
         from PIL import Image
