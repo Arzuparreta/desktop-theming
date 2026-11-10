@@ -26,7 +26,7 @@ are resolved before review; application never switches to an unreviewed adapter.
 | Xfce | Existing monitor/workspace image properties, zoom style, disable cycling | Restores individual previous images, styles and cycling flags. Uninitialized properties are not created |
 | swww / awww | Image per output reported by a live query, without transitions | Image-backed outputs with readable previous files; both original and namespaced query formats are supported; solid colors are rejected |
 | Hyprland + hyprpaper | Preload and set image per active output | Legacy `hyprctl hyprpaper listactive/preload/wallpaper` IPC, checked at runtime. New protocols without these queries are unsupported. Commas in image paths are rejected. Loaded images are not unloaded |
-| X11 + feh (e.g. i3/Openbox) | Root background using `--bg-fill --no-fehbg` | Requires a simple parseable existing `.fehbg` restoration record and xprop root pixmap evidence. The script is never executed, and `.fehbg` is never rewritten, including symlinks |
+| X11 + feh (e.g. i3/Openbox) | Root background using `--bg-fill --no-fehbg` | Requires a simple parseable existing `.fehbg` restoration record and readable xprop root state (including absent pixmap properties on a fresh session). The script is never executed, and `.fehbg` is never rewritten, including symlinks |
 
 Swaybg has a separate **Use image** configuration workflow: it edits literal
 background directives in `sway/config` for your next manual Sway reload. It never
@@ -60,7 +60,12 @@ user's existing startup script is deliberately unchanged.
 
 Feh has no query API returning its current source image. On first use its
 existing `.fehbg` record is assumed to describe the root background; the X11
-pixmap identity detects subsequent replacements. Further application and ordered
+pixmap identity detects subsequent replacements. A fresh session with both root
+pixmap properties absent is also supported: review explicitly warns that undo
+restores the last configured `.fehbg` image, not the current unregistered
+background. The absent-property state is rechecked before applying, so a
+wallpaper set after review invalidates the plan. Malformed query output and
+missing restoration records/images remain blocked. Further application and ordered
 undo use journalled images and newly allocated pixmap identities. An abrupt
 process/power loss between feh replacing the pixmap and recording its new ID
 cannot be automatically attributed safely: recovery refuses an unknown pixmap
@@ -78,7 +83,8 @@ symlink preservation and conflict rejection. They do not establish verification
 on every desktop version or real compositor. Real-session checks must be done
 by explicitly applying a reviewed plan on a test desktop. The bundled
 `--smoke-test-wallpaper` diagnostic additionally runs real feh/xprop and the
-reviewed apply, undo and failure rollback against its own private Xvfb with
+reviewed first-use apply on an uninitialized root, undo and failure rollback
+against its own private Xvfb with
 temporary HOME/XDG directories. It never sets wallpaper on the caller's display.
 `--smoke-test-feh` only decodes a temporary image with host feh and needs no Xvfb.
 

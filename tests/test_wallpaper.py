@@ -316,6 +316,59 @@ class WallpaperTests(unittest.TestCase):
             changes.undo(self.paths, first['id'])
         self.assertEqual(restored, [str(self.image), str(third), str(self.image), str(self.old)])
 
+    def uninitialized_feh(self):
+        (self.root / '.fehbg').write_text('feh --bg-fill ' + repr(str(self.old)))
+        root = ['_XROOTPMAP_ID:  not found.\nESETROOT_PMAP_ID:  not found.']
+        calls = []
+
+        def fake(args):
+            calls.append(args)
+            if args[0].endswith('xprop'):
+                return root[0]
+            root[0] = '_XROOTPMAP_ID(PIXMAP): pixmap id # 0x123' + str(len(calls))
+            return ''
+
+        self.command.side_effect = fake
+        return root, calls
+
+    def test_feh_fresh_session_review_apply_and_undo(self):
+        root, calls = self.uninitialized_feh()
+        with patch.dict(os.environ, {'XDG_CURRENT_DESKTOP': 'i3'}):
+            plan = self.plan()
+            self.assertTrue(plan['wallpaper_action']['uninitialized_root'])
+            self.assertTrue(any('last configured image' in w for w in plan['warnings']))
+            self.assertTrue(all(args[0].endswith('xprop') for args in calls))
+            self.assertFalse(self.paths.state.exists())
+            applied = self.apply(plan)
+            self.assertIn('0x123', root[0])
+            changes.undo(self.paths, applied['id'])
+        setters = [args for args in calls if args[0].endswith('feh')]
+        self.assertEqual([args[-1] for args in setters], [str(self.image), str(self.old)])
+
+    def test_feh_fresh_session_rejects_wallpaper_set_after_review(self):
+        root, calls = self.uninitialized_feh()
+        with patch.dict(os.environ, {'XDG_CURRENT_DESKTOP': 'i3'}):
+            action = self.plan()['wallpaper_action']
+            root[0] = '_XROOTPMAP_ID(PIXMAP): pixmap id # 0xbeef'
+            with self.assertRaisesRegex(ValueError, 'changed since review'):
+                wallpaper.apply(action)
+        self.assertTrue(all(args[0].endswith('xprop') for args in calls))
+
+    def test_feh_fresh_session_requires_restorable_image_and_known_query(self):
+        root, calls = self.uninitialized_feh()
+        with patch.dict(os.environ, {'XDG_CURRENT_DESKTOP': 'i3'}):
+            for output in ('', 'unexpected output', '_XROOTPMAP_ID:  not found.',
+                           '_XROOTPMAP_ID(PIXMAP): pixmap id # 0x0',
+                           '_XROOTPMAP_ID:  not found.\n_XROOTPMAP_ID:  not found.'):
+                root[0] = output
+                self.assertFalse(wallpaper.detect(self.paths, self.image, which=self.which)['available'])
+            root[0] = ('_XROOTPMAP_ID:  no such atom on any window.\n'
+                       'ESETROOT_PMAP_ID:  no such atom on any window.')
+            self.assertTrue(wallpaper.detect(self.paths, self.image, which=self.which)['available'])
+            self.old.unlink()
+            self.assertFalse(wallpaper.detect(self.paths, self.image, which=self.which)['available'])
+        self.assertTrue(all(args[0].endswith('xprop') for args in calls))
+
     def test_feh_refuses_arbitrary_shell_and_unknown_previous_images(self):
         (self.root / '.fehbg').write_text('sh -c "touch /tmp/never-run"\n')
         with patch.dict(os.environ, {'XDG_CURRENT_DESKTOP': 'i3'}):

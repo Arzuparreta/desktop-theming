@@ -253,7 +253,17 @@ def _probe(paths, image, backend, tool, **extra):
         raise ValueError('No active wallpaper targets could be read.')
     if backend == 'feh':
         if not re.search(r'0x[1-9a-fA-F][0-9a-fA-F]*', before['root']):
-            raise ValueError('X11 root wallpaper cannot be tracked safely.')
+            # A fresh X11 session need not have a wallpaper pixmap yet. The
+            # absence itself is an observable state and check() compares it
+            # before applying, just as it compares an existing pixmap identity.
+            # Do not interpret arbitrary/malformed query output as this state.
+            missing = {f'{name}: {suffix}' for name in ('_XROOTPMAP_ID', 'ESETROOT_PMAP_ID')
+                       for suffix in ('not found.', 'no such atom on any window.')}
+            lines = [' '.join(line.split()) for line in before['root'].splitlines()]
+            if (len(lines) != 2 or any(line not in missing for line in lines)
+                    or {line.split(':', 1)[0] for line in lines} != {'_XROOTPMAP_ID', 'ESETROOT_PMAP_ID'}):
+                raise ValueError('X11 root wallpaper cannot be tracked safely.')
+            action['uninitialized_root'] = True
         after = {'root': None}  # Actual pixmap identity is journalled after applying.
     elif backend == 'gsettings':
         uri = image.as_uri() if action['schema'] != 'org.mate.background' else str(image)
