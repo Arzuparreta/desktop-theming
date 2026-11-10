@@ -206,6 +206,9 @@ def make_plan(paths, profile, *, which=None):
             raise ValueError("Cannot change desktop wallpaper: " + "; ".join(detected["reasons"]) +
                              " Switch off 'Desktop wallpaper' on the Theme page to apply colors only.")
         wallpaper_action = detected["action"]
+        if wallpaper_action.get("uninitialized_root"):
+            warnings.append("X11 has no registered wallpaper in this session. Undo will restore the "
+                            "last configured image from .fehbg, not the current unregistered background.")
         if wallpaper_action["before"] == wallpaper_action["after"]:
             wallpaper_action = None
     profile_change = changes.change(paths.profile, json.dumps(profile, indent=2) + "\n", paths.config)

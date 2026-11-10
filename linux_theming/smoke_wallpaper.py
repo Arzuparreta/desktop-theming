@@ -73,7 +73,6 @@ def run(*, decoder_only=False):
             old_image = paths.home / 'images #1/b.JPG'
             fehbg = 'feh --bg-fill -- ' + shlex.quote(str(old_image)) + '\n'
             (paths.home / '.fehbg').write_text(fehbg)
-            wallpaper.command([tools['feh'], '--no-fehbg', '--bg-fill', '--', str(old_image)])
             root_args = [tools['xprop'], '-root', '_XROOTPMAP_ID', 'ESETROOT_PMAP_ID']
             original_root = wallpaper.command(root_args)
             kitty = paths.config / 'kitty/kitty.conf'
@@ -87,6 +86,8 @@ def run(*, decoder_only=False):
 
             plan = service.make_plan(paths, profile, which=which)
             require(plan['wallpaper_action']['backend'] == 'feh', 'Wrong wallpaper adapter.')
+            require(plan['wallpaper_action'].get('uninitialized_root'),
+                    'Fresh X11 background was not supported.')
             require(kitty.is_symlink() and not paths.profile.exists() and
                     wallpaper.command(root_args) == original_root, 'Review changed the test desktop.')
             applied = service.apply_reviewed(paths, plan, which=which)
