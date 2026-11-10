@@ -110,6 +110,16 @@ under `$XDG_STATE_HOME/linux-theming/launcher/`. It keeps its journal separate
 from theme transactions so removal remains available after later theme changes.
 An interrupted menu change has its own reviewed recovery action in **⋯ → Menu entry and shortcut…**.
 
+### Startup when OpenGL is unavailable
+
+Before the first window, the app tries to create an OpenGL context. If that fails,
+Qt Quick uses its software renderer and stderr explains why. Without this check, Qt
+aborts with `Failed to initialize graphics backend for OpenGL`. A common cause is
+a driver update without a reboot: the loaded kernel module and the installed GL
+libraries are different versions, and `glxinfo -B` fails as well. Rebooting
+restores OpenGL. Setting `QT_QUICK_BACKEND` or `QSG_RHI_BACKEND` skips the check
+and keeps that choice.
+
 ### Release 0.1.0 startup failure on newer Mesa systems
 
 The original 0.1.0 release bundles Ubuntu 22.04's `libstdc++`. On newer systems
