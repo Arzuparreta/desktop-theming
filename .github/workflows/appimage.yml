@@ -121,6 +121,14 @@ jobs:
           FUSE is required for normal mounting; APPIMAGE_EXTRACT_AND_RUN=1 is the fallback.
           The accompanying .sha256 file verifies the download.
 
+          Automatic color updates use Kitty, Alacritty and Waybar's native
+          configuration watchers, enabled through reviewed reversible settings.
+          Reopen once if watching was disabled. Polybar uses its existing
+          --reload launch flag; no extra watcher service is added.
+          i3 can reload window colors over IPC after apply and undo, without
+          restarting, when no other configuration edits are pending. Activation
+          failures are reported separately from saved files and retained in History.
+
           Redesigned interface: one window with Theme, Applications and History
           pages. The Theme page previews the image with a sample bar and terminal
           painted in the generated palette, in dark or light. A status bar shows the
@@ -161,7 +169,7 @@ jobs:
           Existing preferences are preserved within each adapter's documented
           scope. Exact changes require review; later edits block overwrites.
           Nothing installs packages, signals applications or invokes legacy hooks.
-          The bundled diagnostic exercises all eighteen new file adapters.
+          The bundled diagnostic exercises all twenty-three file adapters.
           See docs/INTEGRATIONS.md, docs/APPIMAGE.md and docs/WALLPAPER.md for
           capability, native syntax, activation and validation limits. Native
           preference tests simulate protocols; every real desktop is not verified.
