@@ -1,7 +1,17 @@
 import json
 from pathlib import Path
 
-from . import appearance, changes, configuration, integrations, inventory, ownership, theme, wallpaper
+from . import (
+    activation,
+    appearance,
+    changes,
+    configuration,
+    integrations,
+    inventory,
+    ownership,
+    theme,
+    wallpaper,
+)
 
 DEFAULT_PROFILE = {"version": 1, "components": [], "wallpaper": "",
                    "mode": "adaptive", "polarity": "dark", "resolutions": {}, "set_wallpaper": False}
@@ -53,7 +63,7 @@ def detach(text, component):
     return configuration.split_block(text)[0]
 
 
-def attach(text, component, output):
+def attach(text, component, output, *, auto_reload=False):
     text = detach(text, component)
     if any(c in str(output) for c in "\r\n\0"):
         raise ValueError("Config paths cannot contain line breaks.")
@@ -63,7 +73,8 @@ def attach(text, component, output):
         raise ValueError("Kitty theme paths cannot contain glob characters.")
     directive = f"include {output}" if component == "kitty" else f"config-file = {output}"
     return text.rstrip("\n") + ("\n\n" if text.rstrip("\n") else "") + (
-        f"{inventory.START}\n{directive}\n{inventory.END}\n")
+        f"{inventory.START}\n{directive}\n" +
+        ("auto_reload_config 0.1\n" if auto_reload else "") + f"{inventory.END}\n")
 
 
 def make_plan(paths, profile, *, which=None):
@@ -181,7 +192,10 @@ def make_plan(paths, profile, *, which=None):
         output = paths.theme(component)
         if not record and (output.exists() or output.is_symlink()):
             raise ValueError(f"Unowned generated theme exists: {output}. Preserve or move it first.")
-        modified = attach(base, component, output)
+        kitty_version = activation.version("kitty", which) if component == "kitty" else None
+        auto_reload = bool(kitty_version and kitty_version >= (0, 47))
+        report["auto_reload"] = auto_reload
+        modified = attach(base, component, output, auto_reload=auto_reload)
         rendered = theme.render(component, value)
         if record is None:
             record = {"version": 1, "component": component, "path": str(config),
@@ -214,15 +228,17 @@ def make_plan(paths, profile, *, which=None):
     profile_change = changes.change(paths.profile, json.dumps(profile, indent=2) + "\n", paths.config)
     if profile_change:
         proposed.append(profile_change)
-    warnings.append("No application is signalled, restarted or explicitly reloaded. "
-                    "Some applications watch their files and native desktop preferences take effect immediately. "
-                    "Otherwise reopen the selected application or use its own reload action.")
+    activation_actions, activation_notes = activation.plan(paths, proposed, removed | set(profile["components"]), which=which)
+    warnings.append("Native configuration watchers need no extra process. If watching was disabled, "
+                    "reopen the application once to enable it. i3 reload is reviewed separately; "
+                    "no application is signalled or restarted.")
     if value["reason"]:
         warnings.append(value["reason"])
     payload = {"version": 1, "profile": profile, "palette": value,
                "changes": proposed, "warnings": warnings, "inputs": inputs,
                "configuration": inspections, "wallpaper_action": wallpaper_action,
-               "settings_actions": settings_actions}
+               "settings_actions": settings_actions, "activation_actions": activation_actions,
+               "activation_notes": activation_notes}
     return dict(payload, id=changes.digest(payload))
 
 

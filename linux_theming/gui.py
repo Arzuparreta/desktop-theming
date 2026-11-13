@@ -20,6 +20,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QGuiApplication
 
 from . import (
+    activation,
     appearance,
     changes,
     inventory,
@@ -584,6 +585,7 @@ class Controller(QObject):
             if plan.get("wallpaper_action"):
                 files.append(wallpaper.describe(plan["wallpaper_action"]))
             files.extend(appearance.describe(action) for action in plan.get("settings_actions", []))
+            files.extend(activation.describe(action) for action in plan.get("activation_actions", []))
             self.publish(review={"kind": "apply", "title": "Review changes", "summary": result["summary"],
                                  "items": result["items"], "level": result["level"],
                                  "changes": files, "warnings": plan["warnings"]}, palette=plan["palette"])
@@ -597,7 +599,10 @@ class Controller(QObject):
             if plan.get("wallpaper_action"):
                 files.append(wallpaper.describe(plan["wallpaper_action"], reverse=True))
             files.extend(appearance.describe(action, reverse=True) for action in plan.get("settings_actions", []))
+            files.extend(activation.describe(action) for action in plan.get("activation_actions", []))
             summary = ["Restore the previous configuration shown below. Later edits are preserved."]
+            summary.extend("Reload the restored i3 window colors without restarting." for action in plan.get("activation_actions", []))
+            summary.extend(plan.get("activation_notes", []))
             item = next((entry for entry in self._state["overview"]["history"] if entry["id"] == ident), {})
             if item.get("migration"):
                 summary.append("Restore the old application data and references, keeping the latest image browsing choices.")
@@ -655,9 +660,12 @@ class Controller(QObject):
             self.publish(overview=overview, profile=copy.deepcopy(overview["profile"]),
                          migration=migration.status(self.paths),
                          applied=copy.deepcopy(overview["profile"]), hasApplied=self.paths.profile.exists(),
-                         review={}, palette={}, exportText="", activation=presentation.activation_guidance(overview["profile"]),
+                         review={}, palette={}, exportText="", activation=presentation.activation_guidance(
+                             overview["profile"], result.get("activation", []), plan.get("configuration") if kind == "apply" else None),
                          notice=("Data migrated. Your palette is preserved. Update an existing menu entry from ⋯ → Menu entry and shortcut."
-                                 if kind == "migration" else "Changes applied. Reopen applications or use their reload actions where needed."
+                                 if kind == "migration" else "Configuration saved. Some automatic color updates failed; see activation details."
+                                 if any(item['runtime'] == 'failed' for item in result.get('activation', []))
+                                 else "Changes applied. Color update details are available."
                                  if result["status"] == "applied" else "Previous configuration restored."))
             # Keep the completion notice while regenerating the preview.
             self.timer.start()

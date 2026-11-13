@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import appearance, integrations, merge, wallpaper
+from . import activation, appearance, integrations, merge, wallpaper
 from .merge import Conflict
 
 
@@ -175,7 +175,8 @@ def history(paths):
                           "migration": bool(item.get("migration")),
                           "status": item["status"], "components": item["components"],
                           "files": len(item["changes"]), "theme": item.get("theme"),
-                          "previous_theme": item.get("previous_theme")})
+                          "previous_theme": item.get("previous_theme"),
+                          "activation": item.get("undo_activation_results" if item["status"] == "undone" else "activation_results", [])})
         except (ValueError, KeyError, OSError) as exc:
             raise ValueError(f"Unreadable history journal: {path}. Preserve it for recovery.") from exc
     return sorted(items, key=lambda value: value["created"], reverse=True)
@@ -313,6 +314,8 @@ def apply(paths, plan, *, already_locked=False):
         journal = {"id": ident, "created": datetime.now(timezone.utc).isoformat(),
                    "status": "prepared", "components": plan["profile"]["components"],
                    "changes": plan["changes"], "wallpaper_action": action, "settings_actions": settings}
+        if "activation_actions" in plan:
+            journal["activation_actions"] = plan["activation_actions"]
         if plan.get("migration"):
             journal["migration"] = True
         journal["theme"] = theme_summary(plan["profile"], plan.get("palette", {}).get("effective"))
@@ -361,7 +364,12 @@ def apply(paths, plan, *, already_locked=False):
                     journal["status"] = "recovery-needed"
             write_journal(journal_path, journal)
             raise
-        return {"id": ident, "status": "applied"}
+        # Files are already committed. An IPC failure is a separate outcome;
+        # never roll back saved configuration or lose the restoration journal.
+        activated = activation.run(plan.get("activation_actions", []))
+        journal["activation_results"] = activated
+        write_journal(journal_path, journal)
+        return {"id": ident, "status": "applied", "activation": activated}
 
 
 def review_undo(paths, ident, *, recover=False):
@@ -407,6 +415,10 @@ def review_undo(paths, ident, *, recover=False):
     payload = {"transaction": ident, "recover": recover,
                "journal": digest(journal), "changes": proposed, "wallpaper_action": action,
                "settings_actions": settings}
+    if "activation_actions" in journal:
+        components = set(journal["components"]) | {a["component"] for a in journal["activation_actions"]}
+        actions, notes = activation.plan(paths, proposed, components)
+        payload.update(activation_actions=actions, activation_notes=notes)
     if navigation is not None:
         payload["navigation_undo"] = navigation["record"]
     return dict(payload, id=digest(payload))
@@ -441,4 +453,7 @@ def undo(paths, ident, *, recover=False, reviewed=None):
             atomic_restore(target, item["after"])
         journal["status"] = "undone"
         write_journal(path, journal)
-        return {"id": ident, "status": "undone"}
+        activated = activation.run(plan.get("activation_actions", []))
+        journal["undo_activation_results"] = activated
+        write_journal(path, journal)
+        return {"id": ident, "status": "undone", "activation": activated}

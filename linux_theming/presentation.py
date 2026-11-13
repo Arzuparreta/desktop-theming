@@ -88,13 +88,15 @@ def review_level(paths, plan, previous):
            for item in plan["changes"]):
         return "attention"
     known = set(integrations.CAPABILITIES.values()) | {plan["palette"].get("reason", "")}
-    if any(note not in known and not note.startswith("No application is signalled,")
+    if plan.get("activation_notes"):
+        return "attention"
+    if any(note not in known and not note.startswith(("No application is signalled,", "Native configuration watchers"))
            for note in plan["warnings"]):
         return "attention"
     return "routine"
 
 
-def activation_guidance(profile):
+def activation_guidance(profile, results=(), configuration=None):
     """Configured state is known; runtime appearance is never inferred from a file."""
     instructions = {
         "konsole": "Reopen Konsole to load the colors in its default user profile.",
@@ -105,10 +107,13 @@ def activation_guidance(profile):
         "t3code": "T3 Code watches its native theme files and environment default. Connected web/desktop clients may follow immediately; mobile keeps its own appearance.",
         "rofi": "Open Rofi again to read its saved colors.",
         "wofi": "Open Wofi again to read its saved colors.",
-        "alacritty": "Live update depends on live_config_reload; otherwise reopen Alacritty.",
+        "kitty": "Kitty 0.47+ supports native auto_reload_config. Reopen once if watching was disabled or kitty.conf did not exist at startup. Older versions need manual reload.",
+        "alacritty": "Native live_config_reload is enabled on supported versions. Reopen once if it was disabled; subsequent color changes use Alacritty's watcher.",
+        "waybar": "Native CSS watching is enabled when an existing conventional config is available. Reopen Waybar once to start the watcher; later color changes reload its stylesheet.",
+        "polybar": "Polybar watches its configuration when launched with --reload. Keep that flag in your existing launch command; no additional watcher is needed.",
         "mako": "Use Mako's own reload action to read the saved colors.",
         "dunst": "Use Dunst's own reload action to read the saved colors.",
-        "i3": "Use i3's reload action yourself. It can also activate unrelated pending i3 edits.",
+        "i3": "Use i3 reload if automatic activation was unavailable. Other pending i3 configuration changes require your manual review first.",
         "sway": "Use Sway's reload action yourself. It can also activate unrelated pending Sway edits.",
         "swaybg": "The image is configured for your next manual Sway reload.",
         "hyprland": "Use Hyprland's own reload action if it has not already noticed the saved colors.",
@@ -118,10 +123,21 @@ def activation_guidance(profile):
         "fish": "Open a new interactive fish session to read its saved colors.",
     }
     names = {item[0]: item[1] for item in inventory.COMPONENTS}
-    return [{"id": component, "name": names[component], "status": "configured",
+    guides = [{"id": component, "name": names[component], "status": "configured",
              "runtime": "unverified", "message": instructions.get(component,
                 "Reopen the application or use its own reload action to read the saved colors.")}
             for component in profile["components"]]
+    for guide in guides:
+        if (configuration is not None and guide['id'] in ('kitty', 'alacritty', 'waybar')
+                and not configuration.get(guide['id'], {}).get('auto_reload')):
+            guide['message'] = 'Automatic reload could not be configured for this version or configuration. Reopen the application or use its own reload action.'
+    for result in results:
+        guide = next((item for item in guides if item['id'] == result['id']), None)
+        if guide is None:
+            guide = {'id': result['id'], 'name': names[result['id']], 'status': 'configured'}
+            guides.append(guide)
+        guide.update(result)
+    return guides
 
 
 def review_summary(paths, plan, previous):
@@ -154,7 +170,9 @@ def review_items(paths, plan, previous):
             result.append(item("Image: " + Path(plan["profile"]["wallpaper"]).name, "theme"))
         if plan.get("wallpaper_action"):
             result.append(item("Change the desktop wallpaper; previous backgrounds are kept for undo.", "attention"))
-        result.append(item("Exact changes are available below. Applications may need their own reload action.", "info"))
+        result.extend(item("Reload i3's window colors after saving, without restarting. Other settings must match its loaded config.", "change", "i3")
+                      for action in plan.get("activation_actions", []) if action['component'] == 'i3')
+        result.append(item("Use native configuration watchers where supported. If disabled before, reopen once to enable them. Exact changes are available below.", "info"))
         return result
     result = [item(f"Apply {source} with a {palette['polarity']} background.", "lead")]
     for ident in sorted(selected | old):
@@ -180,8 +198,10 @@ def review_items(paths, plan, previous):
     if not selected and not old:
         result.append(item("Save this palette for later. No applications will be themed.", "info"))
     elif selected:
-        result.append(item("Reopen applications or use their own reload actions where needed. "
-                           "Native desktop preferences may take effect immediately.", "info"))
+        result.append(item("Native configuration watchers need no extra process. Reopen once if watching was disabled. Other applications may need their own reload action.", "info"))
+    for _action in plan.get("activation_actions", []):
+        result.append(item("Reload i3's window colors after saving, without restarting. Other settings must match its loaded config.", "change", "i3"))
+    result.extend(item(note, "attention", "i3") for note in plan.get("activation_notes", []))
     if plan.get("wallpaper_action"):
         result.append(item("Set the selected image as your desktop wallpaper. Previous backgrounds are kept for undo.", "attention"))
     return result

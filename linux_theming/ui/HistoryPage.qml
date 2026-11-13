@@ -131,6 +131,15 @@ ScrollView {
                         }
                         Text {
                             Layout.fillWidth: true
+                            visible: !!(card.modelData.activation || []).length
+                            text: (card.modelData.activation || []).map(item => item.message).join("\n")
+                            color: (card.modelData.activation || []).some(item => item.runtime === "failed") ? Theme.warning : Theme.textMuted
+                            font.pixelSize: Theme.caption + 1
+                            wrapMode: Text.Wrap
+                            textFormat: Text.PlainText
+                        }
+                        Text {
+                            Layout.fillWidth: true
                             visible: card.latest && card.modelData.status === "applied" && !card.modelData.migration
                             text: "Undo returns to " + (card.modelData.previous_theme
                                 ? ((card.modelData.previous_theme.wallpaper || "Default colors").split("/").pop() + " · " + (card.modelData.previous_theme.polarity === "light" ? "Light" : "Dark"))

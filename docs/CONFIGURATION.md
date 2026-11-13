@@ -150,7 +150,9 @@ Custom launch flags, system config, Flatpak-specific paths and runtime changes
 are not inferred. The tool does not claim that file inspection reconstructs the
 currently displayed desktop. It cannot prevent another program from rewriting
 configuration after a completed transaction; the next operation checks for drift.
-A terminal's own automatic config reload behavior is outside this engine's control.
+Kitty 0.47+ and Alacritty 0.13+ have reviewed native watcher settings. They may
+need reopening once when watching was disabled; see
+[automatic color updates](INTEGRATIONS.md#automatic-color-updates).
 
 Configuration syntax references:
 [kitty](https://sw.kovidgoyal.net/kitty/conf/),

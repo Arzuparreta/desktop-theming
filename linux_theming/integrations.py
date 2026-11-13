@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import applications, changes, formats, merge, rofi, structured
+from . import activation, applications, autoreload, changes, formats, merge, rofi, structured
 
 FILES = {
     **dict.fromkeys(sorted(applications.COMPONENTS), ()),
@@ -27,7 +27,7 @@ FILES = {
     "hyprland": ("hypr/hyprland.conf",),
     "plasma": ("kdeglobals",),
     "polybar": ("polybar/config.ini",),
-    "waybar": ("waybar/style.css",),
+    "waybar": ("waybar/style.css", "waybar/config", "waybar/config.jsonc"),
     "rofi": ("rofi/config.rasi",),
     "wofi": ("wofi/style.css",),
     "dunst": ("dunst/dunstrc",), "mako": ("mako/config",),
@@ -43,19 +43,19 @@ CAPABILITIES = {
     "btop": "Generated btop theme and color_theme selection only. Keep layout, meters and process preferences. Reopen btop or select the theme in its menu.",
     "tmux": "Status, pane, message and selection styles through a generated source-file. Keep bindings, plugins and status text. Use tmux's own source-file action yourself; existing local options may override global defaults.",
     "t3code": "T3 Code native seeded JSON theme and environment defaultTheme generation only. Keep providers, projects, agents and client preferences. Connected clients may follow the environment theme immediately. Mobile keeps its own appearance.",
-    "kitty": "Terminal palette and UI colors. Reopen or reload the terminal.",
+    "kitty": "Terminal palette and UI colors. Enable native auto_reload_config on Kitty 0.47+. Reopen once if automatic reload was disabled or the config did not exist at startup.",
     "ghostty": "Terminal palette and selection colors. Reopen or reload the terminal.",
-    "alacritty": "Modern TOML terminal palette. Legacy YAML/imports need manual migration. Uses live_config_reload when enabled.",
+    "alacritty": "Modern TOML terminal palette. Enable native live_config_reload on Alacritty 0.13+. Reopen once if it was disabled. Legacy YAML/imports need manual migration.",
     "foot": "Terminal palette using the installed version's legacy or dark/light sections. Reopen the terminal; server clients may need their own restart.",
-    "i3": "Window borders and titles. Keep bindings, layout and bar configuration. Reload the session configuration yourself.",
+    "i3": "Window borders and titles. Reload over i3 IPC after saving only when the loaded config differs solely in colors. No restart or extra watcher; other pending edits require manual reload.",
     "sway": "Window borders and titles. Keep bindings, outputs and bar configuration. Reload the session configuration yourself.",
     "swaybg": "Sway background configuration using the selected image, for your next manual session reload. Does not replace a running swaybg process. Keep output layout and scaling. Literal root background directives only; includes need manual resolution.",
     "hyprland": "Active/inactive window border colors. Keep all other settings; the compositor may watch its config.",
     "gnome": "Native light/dark preference and nearest supported accent (GNOME 47+). Select GTK separately for application palette colors. No Shell CSS or extension installation.",
     "plasma": "KDE application color roles in kdeglobals. Icons, fonts, window decoration and Plasma Shell theme stay as configured. Reopen applications to load the colors.",
     "xfce": "Native light/dark GTK theme counterpart, when installed. Select GTK separately for palette colors. Requires an active Xfce settings service.",
-    "polybar": "Existing bar colors and conventional [colors] variables. Keep modules, hardware and layout. Custom module literals stay as configured. Reload the bar yourself.",
-    "waybar": "Bar, tooltip and common module state colors. Keep layout, modules and existing CSS. Custom higher-specificity rules can override these defaults. Reload the bar yourself.",
+    "polybar": "Existing bar colors and conventional [colors] variables. Native automatic reload requires --reload in your existing launch command. Keep modules, hardware and layout; launch scripts are not rewritten.",
+    "waybar": "Bar, tooltip and common module state colors. Enable native reload_style_on_change in an existing conventional config. Reopen Waybar once to start its CSS watcher. Keep layout and modules; higher-specificity rules can override defaults.",
     "rofi": "Rasi palette, widget and normal/active/urgent selection colors over the existing theme. Keep options, layout, @theme and @import files. Imported files are read-only review dependencies. Takes effect on next launch.",
     "wofi": "GTK CSS palette and selected/hover states. Keep launcher configuration. Custom higher-specificity rules may override defaults. Takes effect on next launch.",
     "dunst": "Default and urgency colors. Keep notification behavior and application-specific rules. Reload Dunst yourself.",
@@ -107,6 +107,8 @@ def merger(paths, path):
             continue
         if path not in files:
             continue
+        if component == "waybar" and path in files[1:]:
+            return autoreload.merge_waybar
         if component in applications.GENERATED and path == files[applications.GENERATED[component]]:
             return None
         if component == "vscode" or component == "t3code" and path == files[0]:
@@ -342,6 +344,8 @@ def transform(paths, component, originals, value):
     rendered = render(component, value)
     if component == "alacritty":
         texts[first] = formats.alacritty(text, rendered)
+        if value.get("_alacritty_version") and value["_alacritty_version"] >= (0, 13):
+            texts[first] = autoreload.alacritty(texts[first], value["_alacritty_version"] >= (0, 14))
     elif component in ("foot", "dunst", "mako", "plasma"):
         if component != "plasma" and re.search(r"(?m)^\s*(?:include|include-file|include-directory)\s*=", text):
             raise ValueError(f"{component} includes require manual resolution or standalone export.")
@@ -381,6 +385,16 @@ def transform(paths, component, originals, value):
         texts[first] = rofi.transform(paths, paths_list[0], text, colors(value))
     elif component in ("waybar", "wofi", "gtk3", "gtk4"):
         texts[first] = formats.css(text, rendered)
+        if component == "waybar":
+            configs = [path for path in paths_list[1:] if originals[str(path)]["kind"] != "missing"]
+            if len(configs) > 1:
+                raise ValueError('Both Waybar config and config.jsonc exist; keep one before connecting.')
+            for path in configs:
+                texts[str(path)] = autoreload.waybar(texts[str(path)])
+            # Keep absent configs absent; do not invent a bar layout.
+            for path in paths_list[1:]:
+                if path not in configs:
+                    texts.pop(str(path))
     elif component == "swaybg":
         if re.search(r"(?m)^\s*include\s", text):
             raise ValueError("Sway background includes require manual resolution or export.")
@@ -429,8 +443,9 @@ def load(paths, component):
     try:
         record = json.loads(path.read_text())
         expected_paths = {str(p) for p in targets(paths, component)}
+        legacy_waybar = component == "waybar" and set(record["files"]) == {str(targets(paths, component)[0])}
         if (record["version"] != 2 or record["component"] != component
-                or set(record["files"]) != expected_paths):
+                or set(record["files"]) != expected_paths and not legacy_waybar):
             raise ValueError("Ownership paths or version changed")
         for pair in record["files"].values():
             for key in ("original", "expected"):
@@ -458,12 +473,14 @@ def inspect(paths, component):
         report["link_target"] = first.get("target", "")
         report["linked_paths"] = [name for name, state in states.items() if state["kind"] == "symlink"]
         if record:
-            originals = rebase(paths, record)
+            originals = {**states, **rebase(paths, record)}
         for name, state in states.items():
             changes.safe_parents(Path(name), root_for(paths, Path(name)))
             report["inputs"].append({"path": name, "fingerprint": changes.digest(state)})
             if record:
                 continue
+            if component == "waybar" and name != str(config_paths[0]):
+                continue  # Reload preferences are not color sources.
             for line, text in enumerate(changes.text_of(state).splitlines(), 1):
                 if re.search(r"color|background|foreground|client\.|@theme|@import|zle_highlight|\bbg\b|defaultTheme|source-file", text, re.I):
                     report["sources"].append(dict(path=name, line=line, directive="appearance",
@@ -514,6 +531,8 @@ def plan_all(paths, previous, profile, value, *, which=None):
     # are kept in the restoration data; edits to managed content stop here.
     kept = {name: changes.carry(Path(name), base, current[name], originals[name], merger(paths, name))
             for name, base in written.items()}
+    if "alacritty" in selected:
+        value = dict(value, _alacritty_version=activation.version("alacritty", which))
     if "foot" in selected:
         from . import wallpaper
 
@@ -527,6 +546,10 @@ def plan_all(paths, previous, profile, value, *, which=None):
     for component in sorted(selected):
         report = inspect(paths, component)
         reports[component] = report
+        if component == "alacritty":
+            report["auto_reload"] = bool(value.get("_alacritty_version") and value["_alacritty_version"] >= (0, 13))
+        if component == "waybar":
+            report["auto_reload"] = any(current[str(p)]["kind"] != "missing" for p in targets(paths, component)[1:])
         dependency_inputs.extend(report.get("dependencies", []))
         if component == "foot" and "_foot_modern" in value:
             report["format"] = "dark/light sections (1.26+)" if value["_foot_modern"] else "legacy sections"

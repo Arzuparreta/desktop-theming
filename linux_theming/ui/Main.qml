@@ -509,7 +509,7 @@ ApplicationWindow {
         width: Math.min(680, window.width - 40)
         height: Math.min(560, window.height - 40)
         title: "How to see the new colors"
-        subtitle: "The files were saved. Linux Theming has not signalled, restarted or observed these running applications."
+        subtitle: "Configuration was saved. Native watchers and confirmed i3 reloads are listed separately; other running appearances are unverified."
         contentItem: ColumnLayout {
             spacing: 12
             ScrollView {
@@ -538,7 +538,11 @@ ApplicationWindow {
                                 spacing: 4
                                 RowLayout {
                                     Text { text: modelData.name; color: Theme.text; font.pixelSize: Theme.body; font.weight: Font.DemiBold }
-                                    Chip { text: "Saved"; tone: "accent"; iconName: "check" }
+                                    Chip {
+                                        text: modelData.runtime === "activated" ? "Updated" : modelData.runtime === "failed" ? "Needs reload" : "Saved"
+                                        tone: modelData.runtime === "failed" ? "warning" : "accent"
+                                        iconName: modelData.runtime === "failed" ? "alert" : "check"
+                                    }
                                 }
                                 Body { Layout.fillWidth: true; text: modelData.message; font.pixelSize: Theme.caption + 1 }
                             }

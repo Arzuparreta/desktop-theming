@@ -12,9 +12,11 @@ per-session instance activation. Preview caching is memory-only, content-aware
 and excluded from reviewed plans. Palette generation now analyzes each image
 once. `--measure-startup` reports isolated fixture milestones.
 
-Activation guidance is per integration and explicitly reports runtime appearance
-as unverified. Automatic live reloads, residency/autostart, named profiles and
-real-desktop/p95 performance claims remain outside this delivery. Compositor
+Activation guidance is per integration. Subsequent work enables native
+Kitty/Alacritty/Waybar watchers and guarded one-shot i3 activation; see
+[current activation contracts and evidence](INTEGRATIONS.md#automatic-color-updates).
+Other runtime appearances remain unverified. Residency/autostart, named profiles
+and real-desktop/p95 performance claims remain outside this delivery. Compositor
 focus and global shortcuts need real-session validation; no Mod+w binding is
 installed. See [the actual user workflow](GUI.md#daily-use).
 
@@ -225,7 +227,9 @@ Introduce activation support per integration only where there is a safe,
 targeted mechanism and disposable-session evidence. Each action declares its
 scope and is explicitly reviewed/authorized, either alongside the file change
 or as a separate action. Never broadcast process-name signals, restart a bar,
-reload an entire session or reuse the legacy hooks for convenience.
+reload unrelated session settings or reuse the legacy hooks for convenience.
+The i3 adapter compares the actual loaded config with the reviewed file and
+offers IPC reload only when non-color settings match; it never restarts i3.
 
 Activation failure must not be reported as a failed file transaction if the
 configuration was saved. Show what succeeded, what failed and the next action.

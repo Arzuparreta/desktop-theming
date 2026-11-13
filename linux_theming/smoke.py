@@ -17,7 +17,8 @@ def isolated_environment(*, x11=False):
             continue
         for command in component[3]:
             stub = binaries / command
-            stub.write_text("#!/bin/sh\nprintf 'foot version: 1.28.0\\n'\n" if command == "foot" else "#!/bin/sh\nexit 0\n")
+            versions = {'foot': 'foot version: 1.28.0', 'kitty': 'kitty 0.50.0', 'alacritty': 'alacritty 0.17.0'}
+            stub.write_text("#!/bin/sh\nprintf '" + versions[command] + "\\n'\n" if command in versions else "#!/bin/sh\nexit 0\n")
             stub.chmod(0o700)
     os.environ.update(HOME=str(root), XDG_CONFIG_HOME=str(root / "config"),
                       XDG_DATA_HOME=str(root / "data"),
@@ -25,7 +26,7 @@ def isolated_environment(*, x11=False):
                       XDG_RUNTIME_DIR=str(root / "runtime"), PATH=str(binaries),
                       QT_QPA_PLATFORM="xcb" if x11 else "offscreen",
                       QT_QUICK_BACKEND="rhi" if x11 else "software", ZDOTDIR="", T3CODE_HOME=str(root / ".t3"),
-                      DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent-desktop-smoke-bus")
+                      DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent-desktop-smoke-bus", I3SOCK="")
     if x11:
         os.environ["QSG_RHI_BACKEND"] = "opengl"
     (root / "runtime").mkdir(mode=0o700)
@@ -64,10 +65,18 @@ def exercise_integrations(paths):
     rofi_source = 'window { width: 40em; }\nelement.alternate.normal { background-color: white; text-color: white; }\n'
     rofi_config.write_text(rofi_original)
     rofi_theme.write_text(rofi_source)
+    waybar = paths.config / "waybar/config.jsonc"
+    waybar.parent.mkdir(parents=True, exist_ok=True)
+    waybar_original = '[// native CSS watcher\n{"output":"left","reload_style_on_change":false}, {"output":"right"}]\n'
+    waybar.write_text(waybar_original)
     profile = dict(service.DEFAULT_PROFILE, components=sorted(integrations.FILES),
                    resolutions={"rofi": {"replace_colors": True}},
                    mode="safe", wallpaper=str(paths.home / "images #1/a #1.png"))
     initial = service.apply_reviewed(paths, service.make_plan(paths, profile))
+    from . import structured
+
+    if not all(bar['reload_style_on_change'] for bar in structured.document(waybar.read_text(), allow_array=True)[0]):
+        raise ValueError('Bundled Waybar native CSS watching was not enabled')
     if not all(inventory.managed(paths, component) for component in integrations.FILES):
         raise ValueError("Bundled file adapter ownership is incomplete")
     if service.make_plan(paths, profile)["changes"]:
@@ -83,6 +92,8 @@ def exercise_integrations(paths):
         raise ValueError("Bundled Rofi import/undo changed the original theme or preferences")
     if polybar.read_text() != original:
         raise ValueError("Bundled adapter disconnection lost original preferences")
+    if waybar.read_text() != waybar_original:
+        raise ValueError('Bundled Waybar disconnection lost previous reload preferences')
     changes.undo(paths, disconnected["id"])
     changes.undo(paths, initial["id"])
     if paths.profile.exists() or any(paths.ownership(c).exists() for c in integrations.FILES):

@@ -630,6 +630,25 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.controller.state["review"])
         self.assertFalse(self.controller.state["error"])
 
+    def test_activation_failure_is_separate_from_saved_configuration_in_the_window(self):
+        self.controller.selectComponent('i3', True)
+        self.settle()
+        action = {'component': 'i3', 'path': str(self.paths.config / 'i3/config')}
+        outcome = {'id': 'i3', 'runtime': 'failed', 'message': 'Saved; private IPC fixture disconnected. Use i3 reload.'}
+        with patch('linux_theming.activation.plan', return_value=([action], [])), patch(
+                'linux_theming.activation.run', return_value=[outcome]):
+            self.controller.review()
+            self.settle()
+            self.assertTrue(any(change['label'] == 'i3 color activation' for change in self.controller.state['review']['changes']))
+            self.controller.approve()
+            self.settle()
+        self.assertFalse(self.controller.state['error'])
+        self.assertIn('automatic color updates failed', self.controller.state['notice'])
+        self.assertEqual(self.controller.state['activation'][0]['runtime'], 'failed')
+        self.assertEqual(self.controller.state['overview']['history'][0]['status'], 'applied')
+        self.assertIn('client.focused', (self.paths.config / 'i3/config').read_text())
+        self.assertEqual(self.messages, [])
+
     def test_connect_review_apply_disconnect_and_undo_via_window(self):
         config = self.paths.config / "kitty/kitty.conf"
         config.parent.mkdir(parents=True)

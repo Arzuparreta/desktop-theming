@@ -5,10 +5,12 @@ workflow. This table describes the exact scope, rather than claiming that every
 part of a desktop or every third-party theme can be recolored.
 
 Discovery, selection, palette previews and change review are read-only. Approval
-applies the reviewed files/preferences only. Nothing installs software, invokes
+applies the reviewed files/preferences and any listed i3 activation. Nothing installs software, invokes
 legacy walltheme hooks, sends process signals, starts a daemon or restarts an
 application. Native preferences and applications which watch configuration files
-may update immediately. Otherwise use the application's own reload action or
+may update immediately. Native reload settings use the application's own watcher,
+without another process. See [automatic color updates](#automatic-color-updates).
+Otherwise use the application's own reload action or
 reopen it yourself.
 
 | Integration | Managed changes | Conditions and activation |
@@ -19,16 +21,16 @@ reopen it yourself.
 | btop | Generated `btop/themes/linux-theming.theme` and `color_theme` selection | Keep layout, update interval, meters and all other preferences. Terminal transparency/theme-background settings remain effective. Reopen btop or select the theme in its menu |
 | tmux | Generated color styles loaded through `source-file` in `~/.tmux.conf` or existing `$XDG_CONFIG_HOME/tmux/tmux.conf` | Both conventional configs together are ambiguous and blocked. Keep bindings, plugins and status text. No server connection during discovery/review/apply; manually source the config or start a new server. Existing local options can override global styles |
 | T3 Code | Native seeded JSON theme in `.t3/userdata/themes/linux-theming.json`, plus environment `defaultTheme` and `defaultThemeSetAt` | Uses T3's existing theme publication/settings watchers. No CSS injection, application patching, provider/project/agent edits or process reload. Connected desktop/web clients may follow immediately; mobile keeps its own appearance. See the scope below |
-| Kitty / Ghostty | Terminal palette, selection and supported UI color directives, through a marked include | Existing color/include inspection; Ghostty's two conventional config names must not coexist. Reopen or reload the terminal |
-| Alacritty | Primary, cursor, selection and sixteen ANSI colors in `alacritty/alacritty.toml` | Modern TOML only. Legacy `.yml`/`.yaml`, imports and ambiguous inline/quoted color tables require explicit manual migration or export. Unrelated TOML values are compared before accepting an edit |
+| Kitty / Ghostty | Terminal palette, selection and supported UI color directives, through a marked include | Kitty 0.47+: enable native `auto_reload_config 0.1` in the owned block. Reopen once if watching was disabled or the main config did not exist at startup. Older Kitty and Ghostty: manual reload. Ghostty's two conventional config names must not coexist |
+| Alacritty | Primary, cursor, selection and sixteen ANSI colors in `alacritty/alacritty.toml`; native `live_config_reload = true` | Probe the installed version: 0.13 uses the root setting, 0.14+ uses `[general]`. Unknown/older versions keep manual activation. Reopen once if watching was disabled. Modern TOML only; legacy YAML, imports and ambiguous tables need manual resolution |
 | foot | Legacy `[colors]`/`[colors2]` or modern `[colors-dark]`/`[colors-light]` palettes | Review reads `foot --version`: 1.26+ uses modern sections (old names were removed in 1.28). Old headers/theme indices are migrated while retaining other values. Root main preferences or explicit `[main]` both work. Standalone exports use modern syntax. Reopen terminals |
-| i3 / Sway | `client.*` window border/title color roles | Bindings, commands, output settings and bars remain intact. Includes and complex syntax require manual resolution/export. Reload session configuration yourself |
+| i3 / Sway | `client.*` window border/title color roles | i3: reviewed IPC `reload` after saving and undo, only for the active conventional config with no other pending edits; no `restart`. Sway: manual reload. Includes and complex syntax require manual resolution/export |
 | Hyprland | `general` active/inactive border colors | Keep other general settings. Literal root config only; source includes require manual resolution. Hyprland may watch its config |
 | GNOME | Native `color-scheme` and nearest available native accent, when exposed | Active GNOME session, readable enum ranges and writable keys required. Accent is a native named color (GNOME 47+), not arbitrary RGB. Older versions change mode only. No Shell extension/theme installation. Select GTK separately for application CSS |
 | KDE Plasma | Application color roles in `kdeglobals`, including window title roles | Keep icons, fonts, widget style, decoration and Plasma Shell theme. Reopen applications. Does not install/activate a Shell theme or reload KWin |
 | Xfce | Existing GTK theme's installed light/dark counterpart through `/Net/ThemeName` | Active Xfce and already running `xfconfd` required. Missing counterparts block the change. Adwaita variants are built into GTK 3. No icon, font, panel or window-manager changes. Select GTK separately for palette CSS |
-| Polybar | Each existing bar's background/foreground and conventional `[colors]` variables | Needs an existing `[bar/name]`; no module/hardware configuration is invented. Custom module literals or differently named variables remain as configured. Reload yourself |
-| Waybar | Bar, tooltip, workspace active/hover/urgent and battery-critical defaults in `style.css` | Keep modules, layout and existing style rules. Higher-specificity application/user rules may override defaults. Reload yourself |
+| Polybar | Each existing bar's background/foreground and conventional `[colors]` variables | Native watching uses the existing `polybar --reload` launch flag. No config option can enable that flag in a running bar; launch scripts are kept. Needs an existing `[bar/name]`; custom module literals stay as configured |
+| Waybar | Palette defaults in `style.css` and `reload_style_on_change: true` in the existing `config` or `config.jsonc` | Reopen once to start native CSS watching. Preserve comments, modules/layout and unrelated JSONC settings. Multi-bar arrays need distinct name/output/position values and stable order for safe restoration. Includes and ambiguous config names are blocked; no missing layout is invented. Higher-specificity CSS can override colors |
 | Rofi | Color overrides over the existing Rasi theme, including normal/alternate/selected rows, active/urgent states and color-bearing child/media selectors | Keep `configuration` preferences, layout and literal `@theme`/`@import`/`?import` directives. Imported files are read-only review inputs. No Rofi process is invoked by discovery or application. Next invocation; command-line theme overrides may take precedence. See the scope below |
 | Wofi | Window, input, text and selected/hover entry colors in `style.css` | Keep launcher behavior/layout. Custom higher-specificity rules may override defaults. Next invocation |
 | Dunst | Global/default and low/normal/critical urgency colors | Keep fonts, timeouts and application-specific filter rules. Filters can intentionally override defaults. Reload yourself |
@@ -46,6 +48,48 @@ configuration syntax, missing dependencies or incompatible running sessions are
 still reported and blocked; capability does not imply current availability.
 Other unlisted desktop components remain unsupported. Discovery of GTK libraries
 is unknown rather than an installation claim; its user CSS can still be selected.
+
+## Automatic color updates
+
+Kitty, Alacritty and Waybar reload preferences appear in exact review, belong to
+the selected integration and restore their previous values on disconnect/undo.
+Enabling a startup-only watcher cannot activate it inside an already-running
+application: reopen once when it was disabled. Later palette updates and undo
+are noticed by that application's watcher. Older/unknown terminal versions and
+Waybar without a conventional user config retain explicit manual instructions.
+Existing older Waybar records owning only CSS remain usable and acquire reload
+preferences on the next reviewed application.
+
+i3 has no equivalent watcher. Planning reads its loaded config and active config
+path over IPC. Reload is offered only when everything except `client.*` colors,
+blank lines and comments matches the proposed file. Variables, bindings, bars,
+commands and other pending edits prevent automatic reload; saving colors still
+works. The exact action is reviewed alongside files and rechecked against the
+same user-owned socket/peer and loaded config after saving. `reload` redraws the
+decorations without restarting i3 or rerunning `exec_always` commands. A failed
+activation is reported separately from a successful save, retained in history,
+and does not roll back configuration. Undo/disconnect use the same checks; they
+do not reload old history entries that never authorized activation.
+
+Polybar already watches files when its existing launch command uses `--reload`.
+VS Code and T3 Code use their own settings/theme watchers; native GNOME/Xfce and
+GNOME Terminal preferences use the desktop settings APIs. Rofi/Wofi read colors
+on their next invocation. Hyprland may watch configuration according to its own
+setup. No process-name signals, restart hooks or extra background daemon are
+added for Ghostty, foot, Sway, notifications, GTK CSS, Qt, shells, btop or tmux;
+their manual/native limitations remain in the table.
+
+Validation: a private Xvfb with i3 4.25.1, Kitty 0.50 and Alacritty 0.17 verifies
+real decoration/background pixels, Kitty's color query, atomic include updates,
+undo, unchanged process identities and a single execution of `exec_always`.
+Waybar's native option is checked against its upstream contract and JSONC
+transaction tests; its runtime was not available locally. These checks never
+apply to the developer's desktop. References:
+[Kitty auto_reload_config](https://sw.kovidgoyal.net/kitty/conf/#opt-kitty.auto_reload_config),
+[Alacritty general settings](https://alacritty.org/config-alacritty.html#general),
+[Waybar reload_style_on_change](https://man.archlinux.org/man/waybar.5.en),
+[Polybar command-line options](https://polybar.readthedocs.io/en/stable/man/polybar.1.html),
+[i3 reload](https://i3wm.org/docs/userguide.html#_reloading_restarting_exiting).
 
 ## Ownership, replacement and recovery
 

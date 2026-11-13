@@ -76,8 +76,11 @@ disconnecting an integration are both reviewed, reversible changes.
 
 Discovery must not alter desktop settings. Applying a plan changes only the
 selected integrations, an explicitly selected desktop wallpaper and the engine's
-own profile/history. No automatic package installation, process signalling or
-session reload is included. Probing never changes the wallpaper.
+own profile/history. Native file watchers are enabled through reviewed,
+reversible settings where supported. i3 offers a reviewed one-shot IPC reload
+only when other configuration matches the loaded session; it never restarts i3.
+No automatic package installation, process signalling or background watcher
+service is included. Probing never changes the wallpaper or reloads applications.
 
 ## Next outcomes
 

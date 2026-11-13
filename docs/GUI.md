@@ -94,8 +94,10 @@ conflict-checked reverse review. New history entries identify the theme; older
 journals remain usable.
 
 **How to see the colors…** appears after applying and explains the next action
-for each configured application. It reports saved configuration and explicitly
-unverified runtime appearance. It does not signal, restart or reload applications.
+for each configured application. It distinguishes saved configuration, confirmed
+i3 activation and activation failures. Other running appearances remain unverified.
+Kitty/Alacritty/Waybar native watcher settings are reviewed alongside colors;
+reopen once if watching was disabled before. No extra watcher service is started.
 
 | Key | Action |
 |---|---|
@@ -236,9 +238,10 @@ keeping pending palette and application choices.
 Write/review controls are disabled during serialized exclusive work. Palette
 preview and discovery run independently so browsing remains responsive. Closing
 discards read-only results; an exclusive operation must finish safely first.
-No application is signalled or restarted; use the
-application's own reload action or reopen it after applying. Native settings and
-applications that watch files may update immediately.
+No application is signalled or restarted. The reviewed i3 action reloads colors
+only when the other settings match its loaded configuration; pending edits keep
+manual reload instructions. Native settings and file watchers may update other
+applications immediately. See [automatic updates and limits](INTEGRATIONS.md#automatic-color-updates).
 
 ## Validation
 

@@ -11,7 +11,7 @@ TOKEN = re.compile(r'\s+|//[^\r\n]*|/\*.*?\*/|"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnr
 MISSING = object()
 
 
-def document(text):
+def document(text, *, allow_array=False):
     """Return the parsed root and positions of object members, including JSONC."""
     tokens, position = [], 0
     for match in TOKEN.finditer(text):
@@ -81,17 +81,17 @@ def document(text):
         return result, start, end
 
     result, _, _ = value(())
-    if index != len(tokens) or not isinstance(result, dict):
+    if index != len(tokens) or not isinstance(result, (dict, list) if allow_array else dict):
         raise ValueError("Expected one JSON settings object.")
     return result, objects, tokens[0][1]
 
 
-def edit(text, path, wanted):
+def edit(text, path, wanted, *, allow_array=False):
     """Set or delete one member while keeping all other text unchanged."""
-    parsed, objects, _ = document(text)
+    parsed, objects, _ = document(text, allow_array=allow_array)
     if not objects:
         text = text + '\n{}\n'
-        parsed, objects, _ = document(text)
+        parsed, objects, _ = document(text, allow_array=allow_array)
     parent, key = path[:-1], path[-1]
     if parent not in objects:
         if len(path) == 1:
@@ -99,7 +99,7 @@ def edit(text, path, wanted):
         node = parsed
         for index, name in enumerate(parent):
             if name not in node:
-                return edit(text, path[:index + 1], nested(path[index + 1:], wanted))
+                return edit(text, path[:index + 1], nested(path[index + 1:], wanted), allow_array=allow_array)
             if not isinstance(node[name], dict):
                 raise ValueError(f"{name} must be a JSON object.")
             node = node[name]
@@ -130,18 +130,21 @@ def nested(path, value):
     return value
 
 
-def update(text, values):
+def update(text, values, *, allow_array=False):
     for path, wanted in values.items():
-        current = document(text)[0]
+        current = document(text, allow_array=allow_array)[0]
         for key in path:
-            current = current.get(key, MISSING) if isinstance(current, dict) else MISSING
+            if isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
+                current = current[key]
+            else:
+                current = current.get(key, MISSING) if isinstance(current, dict) else MISSING
         if current != wanted:
-            text = edit(text, path, wanted)
-    document(text)
+            text = edit(text, path, wanted, allow_array=allow_array)
+    document(text, allow_array=allow_array)
     return text
 
 
-def merge(base, theirs, ours):
+def merge(base, theirs, ours, *, allow_array=False):
     """Preserve application saves and other keys; stop on managed leaf edits."""
     from .merge import Conflict
 
@@ -149,7 +152,7 @@ def merge(base, theirs, ours):
         return ours
     if ours == base:
         return theirs
-    old, current, wanted = (document(text)[0] for text in (base, theirs, ours))
+    old, current, wanted = (document(text, allow_array=allow_array)[0] for text in (base, theirs, ours))
     edits = {}
 
     def walk(before, now, after, path=()):
@@ -164,10 +167,14 @@ def merge(base, theirs, ours):
             after = {} if after is MISSING else after
             for key in dict.fromkeys([*before, *after]):
                 walk(before.get(key, MISSING), now.get(key, MISSING), after.get(key, MISSING), path + (key,))
+        elif (allow_array and isinstance(before, list) and isinstance(now, list) and isinstance(after, list)
+              and len(before) == len(now) == len(after)):
+            for index, (prior, actual, target) in enumerate(zip(before, now, after, strict=True)):
+                walk(prior, actual, target, path + (index,))
         elif now != before:
-            raise Conflict('the setting ' + '.'.join(path))
+            raise Conflict('the setting ' + '.'.join(map(str, path)))
         else:
             edits[path] = after
 
     walk(old, current, wanted)
-    return update(theirs, edits)
+    return update(theirs, edits, allow_array=allow_array)

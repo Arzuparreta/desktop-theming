@@ -20,6 +20,9 @@ Terminals, bars, launchers, notifications, shells, GTK/Qt and native desktop
 appearance have individually scoped managed integrations. Desktop wallpaper
 changes use compatible session adapters; swaybg has a Sway configuration workflow
 for the next manual reload. [Exact capabilities and limits](docs/INTEGRATIONS.md).
+Native Kitty, Alacritty and Waybar watchers are enabled through reviewed settings;
+i3 can reload window colors automatically when no other config edits are pending.
+No additional watcher service is needed. [Activation details](docs/INTEGRATIONS.md#automatic-color-updates).
 MCP and a small fallback CLI for agents are planned later.
 
 ## Launch
@@ -96,7 +99,7 @@ choices, links, ownership, disconnection and conflicts. The GUI exposes these wo
 | VS Code, T3 Code | Executables/processes and conventional user configuration | VS Code interface/terminal customizations; T3 native environment theme, keeping other settings |
 | btop, tmux | Executables/processes and conventional configs | Generated themes; preserve layout, bindings and status text; manual activation where needed |
 | Alacritty, foot | Executables, processes, conventional configs and appearance sources | TOML/INI palettes, disconnect and undo |
-| i3, Sway, Hyprland | Available/running components and session evidence | Window borders/title roles; manual session reload |
+| i3, Sway, Hyprland | Available/running components and session evidence | Window border/title roles; guarded i3 IPC reload, Sway manual, Hyprland native behavior |
 | GNOME, Xfce | Available/running components and session evidence | Reviewed native mode/accent or installed theme counterpart; active session required |
 | KDE Plasma | Executables, processes, kdeglobals | Application color roles; Shell theme stays as configured |
 | Polybar, Waybar, Rofi, Wofi, Dunst, Mako | Executables, processes, conventional configs | Scoped palette defaults and supported interaction/urgency states |

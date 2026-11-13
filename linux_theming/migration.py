@@ -127,6 +127,8 @@ def plan(paths):
             old_targets, new_targets = integrations.targets(old, component), integrations.targets(new, component)
             records = {}
             for a, b in zip(old_targets, new_targets, strict=True):
+                if str(a) not in record["files"]:
+                    continue  # Older Waybar records own CSS only, not reload preferences.
                 pair = record["files"][str(a)]
                 current = changes.snapshot(a)
                 expected = _expected(paths, component, a, pair["expected"], old_targets, new_targets)

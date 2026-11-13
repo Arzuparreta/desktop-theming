@@ -20,6 +20,8 @@ MCP and a small fallback CLI for agents are future adapters.
 - `linux_theming/theme.py`: palette engine access and terminal renderers.
 - `linux_theming/service.py`: profile validation and reviewed plan generation/application.
 - `linux_theming/changes.py`: conflict checks, file replacement and undo journals.
+- `linux_theming/activation.py`: reviewed one-shot i3 IPC and separate activation outcomes.
+- `linux_theming/autoreload.py`: reversible native Alacritty/Waybar watcher preferences.
 - `linux_theming/merge.py`: three-way line and INI key merges that keep later outside edits.
 - `linux_theming/paths.py`: HOME/XDG data locations.
 - `bin/walltheme`, `config/`, `scripts/install-thinkpad.sh`: original legacy workflow.
@@ -79,8 +81,10 @@ undo order, disconnection and normal installation without desktop changes.
 - Engine discovery, configuration planning and transactions: isolated automated tests.
 - New file adapters and native GNOME/Xfce preferences: see the per-integration
   [scope, native parser checks and simulated protocol evidence](INTEGRATIONS.md).
-- Kitty/Ghostty rendering: palette and configuration tests; rendered appearance and
-  reload in a real session remain to be verified.
+- Kitty/Alacritty/i3: `tests/test_activation_native.py` uses its own Xvfb, real
+  window pixels and Kitty queries to verify apply/undo without restarts or repeat
+  `exec_always`. Needs existing Xvfb, i3, Kitty 0.47+ and Alacritty 0.14+; installs
+  nothing. Other app runtime claims remain limited as documented in INTEGRATIONS.md.
 - Original ThinkPad workflow: preserved; never reapplied to validate this engine.
 - CI is configured for Python 3.11 and 3.14; local checks do not establish CI success.
 
